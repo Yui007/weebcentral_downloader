@@ -37,7 +37,7 @@ class WeebCentralScraper:
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
             'Accept-Language': 'en-US,en;q=0.9',
-            'Accept-Encoding': 'gzip, deflate, br',
+            'Accept-Encoding': 'gzip, deflate',  # Removed 'br' to fix decoding issues
             'Connection': 'keep-alive',
             'Sec-Fetch-Dest': 'image',
             'Sec-Fetch-Mode': 'no-cors',
@@ -116,6 +116,14 @@ class WeebCentralScraper:
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
         options.add_argument(f'user-agent={self.headers["User-Agent"]}')
+        # Add preference to disable brotli compression
+        options.add_experimental_option('prefs', {
+            'profile.default_content_settings.cookies': 2,
+            'profile.managed_default_content_settings.images': 1,
+            'profile.default_content_setting_values.notifications': 2
+        })
+        # Add header to disable brotli
+        options.add_argument('--accept-encoding=gzip, deflate')
         
         driver = webdriver.Chrome(options=options)
         
