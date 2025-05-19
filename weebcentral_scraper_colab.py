@@ -1,6 +1,10 @@
 import requests
 import os
 import re
+import shutil  # Add missing import for shutil
+import tempfile  # Add import for tempfile
+import uuid
+from datetime import datetime
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
 import logging
@@ -66,7 +70,16 @@ class WeebCentralScraper:
         self.delay = delay
         self.max_threads = max_threads
         self.headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate',  # Removed 'br' to fix decoding issues
+            'Connection': 'keep-alive',
+            'Sec-Fetch-Dest': 'image',
+            'Sec-Fetch-Mode': 'no-cors',
+            'Sec-Fetch-Site': 'cross-site',
+            'Pragma': 'no-cache',
+            'Cache-Control': 'no-cache',
         }
         
         # Create output directory in Colab
@@ -118,6 +131,15 @@ class WeebCentralScraper:
             chrome_options.add_argument('--disable-software-rasterizer')
             chrome_options.add_argument('--disable-extensions')
             chrome_options.add_argument('--remote-debugging-port=0')  # Use random port
+            # Add header to disable brotli
+            chrome_options.add_argument('--accept-encoding=gzip, deflate')
+            
+            # Add preference to disable brotli compression
+            chrome_options.add_experimental_option('prefs', {
+                'profile.default_content_settings.cookies': 2,
+                'profile.managed_default_content_settings.images': 1,
+                'profile.default_content_setting_values.notifications': 2
+            })
             
             if IN_COLAB:
                 service = Service('/usr/bin/chromedriver')
