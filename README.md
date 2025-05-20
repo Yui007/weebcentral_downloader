@@ -2,6 +2,11 @@
 
 A powerful and user-friendly manga downloader specifically designed for WeebCentral. Features both GUI and command-line interfaces for downloading manga chapters efficiently with multi-threading support.
 
+# Extension
+
+I also created an extension if you dont want to use the script.
+https://github.com/Yui007/weebcentral_extension
+
 ## Features
 
 - **User-Friendly Interface**: Choose between GUI or command-line interface
