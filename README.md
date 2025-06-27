@@ -12,11 +12,13 @@ https://github.com/Yui007/weebcentral_extension
 - **User-Friendly Interface**: Choose between GUI or command-line interface
 - **Flexible Chapter Selection**: Download single chapters, ranges, or entire series
 - **Concurrent Downloads**: Multi-threaded chapter downloading for improved speed
+- **PDF Conversion**: Automatically convert downloaded chapters into PDF files.
 - **Progress Tracking**: Real-time download progress with status updates
 - **Checkpoint System**: Resume interrupted downloads
 - **Smart Naming**: Automatic folder organization with clean naming
 - **Error Handling**: Robust error recovery and logging system
 - **Google Colab Support**: Run directly in Google Colab for cloud-based downloading
+
 ## Installation
 
 1. Clone the repository:
@@ -46,6 +48,7 @@ Run the graphical interface:
 ```bash
 python weebcentral_gui.py
 ```
+- Check the "Convert chapters to PDF" box to enable PDF conversion.
 
 ### Command Line Version
 Run the command-line version:
@@ -59,6 +62,7 @@ Follow the prompts to:
 - Choose output directory
 - Set download delay
 - Configure thread count
+- Choose whether to convert to PDF
 
 ## Requirements
 
@@ -68,6 +72,8 @@ Follow the prompts to:
 - selenium>=4.15.0
 - tqdm>=4.66.1
 - PyQt6>=6.5.0
+- fpdf2>=2.7.4
+- Pillow>=9.3.0
 
 ## Configuration Options
 
@@ -78,6 +84,7 @@ Follow the prompts to:
 - **Output Directory**: Default is 'downloads'
 - **Delay**: Time between chapter downloads (default: 1.0s)
 - **Max Threads**: Concurrent chapter downloads (default: 4)
+- **PDF Conversion**: Option to convert chapters to PDF (default: disabled)
 
 ## Screenshots
 ![image](https://github.com/user-attachments/assets/d6635638-7798-43a6-a790-f8eece059dc6)

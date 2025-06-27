@@ -2,7 +2,7 @@ import sys
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                             QHBoxLayout, QLineEdit, QPushButton, QProgressBar, 
                             QLabel, QDoubleSpinBox, QComboBox, QFrame, QScrollArea,
-                            QFileDialog, QMessageBox, QRadioButton, QButtonGroup)
+                            QFileDialog, QMessageBox, QRadioButton, QButtonGroup, QCheckBox)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QIcon, QFont
 from weebcentral_scraper import WeebCentralScraper
@@ -218,6 +218,11 @@ class MainWindow(QMainWindow):
         dir_layout.addWidget(self.browse_btn)
         layout.addLayout(dir_layout)
         
+        # PDF conversion checkbox
+        self.pdf_checkbox = QCheckBox("Convert chapters to PDF")
+        self.pdf_checkbox.setStyleSheet("QCheckBox { color: #2c3e50; }")
+        layout.addWidget(self.pdf_checkbox)
+        
         # Overall progress
         self.overall_progress = QProgressBar()
         self.overall_progress.setStyleSheet("""
@@ -308,7 +313,8 @@ class MainWindow(QMainWindow):
         scraper = WeebCentralScraper(
             manga_url=url,
             chapter_range=chapter_range,
-            output_dir=output_dir
+            output_dir=output_dir,
+            convert_to_pdf=self.pdf_checkbox.isChecked()
         )
         
         self.download_thread = DownloaderThread(scraper)

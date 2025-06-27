@@ -12,6 +12,8 @@ import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 from selenium.webdriver.support.ui import WebDriverWait
+from fpdf import FPDF
+from PIL import Image
 
 # Set up logging
 logging.basicConfig(
@@ -22,7 +24,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class WeebCentralScraper:
-    def __init__(self, manga_url, chapter_range=None, output_dir="downloads", delay=1, max_threads=4):
+    def __init__(self, manga_url, chapter_range=None, output_dir="downloads", delay=1, max_threads=4, convert_to_pdf=False):
         self.base_url = "https://weebcentral.com"
         if not manga_url.startswith(('http://', 'https://')):
             manga_url = 'https://' + manga_url
@@ -31,6 +33,7 @@ class WeebCentralScraper:
         self.output_dir = output_dir
         self.delay = delay
         self.max_threads = max_threads
+        self.convert_to_pdf = convert_to_pdf
         
         # Enhanced headers
         self.headers = {
@@ -202,7 +205,7 @@ class WeebCentralScraper:
     def download_chapter(self, chapter):
         """Download all images for a chapter"""
         if self.stop_flag():
-            return 0
+            return 0, None
         
         chapter_name = re.sub(r'[\\/*?:"<>|]', '_', chapter['name'])
         chapter_dir = os.path.join(self.output_dir, chapter_name)
@@ -213,7 +216,7 @@ class WeebCentralScraper:
         
         if not image_urls:
             logger.warning(f"No images found for chapter: {chapter['name']}")
-            return 0
+            return 0, None
             
         logger.info(f"Found {len(image_urls)} images")
         
@@ -254,7 +257,50 @@ class WeebCentralScraper:
                             self.progress_callback(chapter['name'], progress)
         
         logger.info(f"Downloaded {downloaded}/{len(image_urls)} images for chapter: {chapter['name']}")
-        return downloaded
+        return downloaded, chapter_dir
+
+    def create_pdf_from_chapter(self, chapter_dir, chapter_name):
+        """Create a PDF from all images in a chapter directory"""
+        logger.info(f"Creating PDF for chapter: {chapter_name}")
+        
+        image_files = sorted([
+            os.path.join(chapter_dir, f)
+            for f in os.listdir(chapter_dir)
+            if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif'))
+        ])
+        
+        if not image_files:
+            logger.warning(f"No images found in {chapter_dir} to create PDF.")
+            return
+
+        pdf = FPDF()
+        for image_file in image_files:
+            try:
+                with Image.open(image_file) as img:
+                    width, height = img.size
+                    # A4 size: 210x297 mm
+                    # Keep aspect ratio
+                    if width > height:
+                        w, h = 297, 210
+                    else:
+                        w, h = 210, 297
+                    
+                    # Scale image to fit page
+                    w_new = w
+                    h_new = h
+                    if width / height > w / h:
+                        h_new = w * height / width
+                    else:
+                        w_new = h * width / height
+                        
+                    pdf.add_page()
+                    pdf.image(image_file, x=(w - w_new) / 2, y=(h - h_new) / 2, w=w_new, h=h_new)
+            except Exception as e:
+                logger.error(f"Failed to process image {image_file}: {e}")
+
+        pdf_path = os.path.join(self.output_dir, f"{chapter_name}.pdf")
+        pdf.output(pdf_path, "F")
+        logger.info(f"Successfully created PDF: {pdf_path}")
 
     def parse_chapter_range(self, total_chapters):
         """Parse chapter range and return list of indices to download"""
@@ -357,11 +403,16 @@ class WeebCentralScraper:
                     
                     chapter = future_to_chapter[future]
                     try:
-                        downloaded = future.result()
-                        total_downloaded += downloaded
-                        # Update checkpoint file
-                        with open(checkpoint_file, 'a') as f:
-                            f.write(f"{chapter['name']}\n")
+                        downloaded, chapter_dir = future.result()
+                        if downloaded > 0:
+                            total_downloaded += downloaded
+                            # Update checkpoint file
+                            with open(checkpoint_file, 'a') as f:
+                                f.write(f"{chapter['name']}\n")
+                            
+                            if self.convert_to_pdf and chapter_dir:
+                                self.create_pdf_from_chapter(chapter_dir, chapter['name'])
+                        
                         time.sleep(self.delay)  # Small delay between chapters
                     except Exception as e:
                         logger.error(f"Error downloading chapter {chapter['name']}: {e}")
@@ -402,13 +453,15 @@ if __name__ == "__main__":
     output_dir = input("Enter output directory (default: downloads): ") or "downloads"
     delay = float(input("Enter delay between chapters in seconds (default: 1.0): ") or "1.0")
     max_threads = int(input("Enter maximum number of download threads (default: 4): ") or "4")
+    convert_to_pdf_choice = input("Convert chapters to PDF? (y/n, default: n): ").lower() == 'y'
     
     scraper = WeebCentralScraper(
         manga_url=manga_url,
         chapter_range=chapter_range,
         output_dir=output_dir,
         delay=delay,
-        max_threads=max_threads
+        max_threads=max_threads,
+        convert_to_pdf=convert_to_pdf_choice
     )
     
-    scraper.run()  # Changed from scraper.run() to scraper.download_chapter()
+    scraper.run()
