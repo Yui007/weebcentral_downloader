@@ -14,6 +14,8 @@ from tqdm import tqdm
 from selenium.webdriver.support.ui import WebDriverWait
 from fpdf import FPDF
 from PIL import Image
+import zipfile
+import shutil
 
 # Set up logging
 logging.basicConfig(
@@ -24,16 +26,18 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class WeebCentralScraper:
-    def __init__(self, manga_url, chapter_range=None, output_dir="downloads", delay=1, max_threads=4, convert_to_pdf=False):
+    def __init__(self, manga_url, chapter_range=None, output_dir="downloads", delay=1.0, max_threads=4, convert_to_pdf=False, convert_to_cbz=False, delete_images_after_conversion=False):
         self.base_url = "https://weebcentral.com"
         if not manga_url.startswith(('http://', 'https://')):
             manga_url = 'https://' + manga_url
         self.manga_url = manga_url
         self.chapter_range = chapter_range
         self.output_dir = output_dir
-        self.delay = delay
+        self.delay = float(delay) # Ensure delay is always float
         self.max_threads = max_threads
         self.convert_to_pdf = convert_to_pdf
+        self.convert_to_cbz = convert_to_cbz
+        self.delete_images_after_conversion = delete_images_after_conversion
         
         # Enhanced headers
         self.headers = {
@@ -69,6 +73,38 @@ class WeebCentralScraper:
             return title_element.text.strip()
         return "unknown_manga"
 
+    def download_cover_image(self, soup, output_dir):
+        """Download the manga cover image"""
+        try:
+            cover_img_element = soup.select_one("img[alt$='cover']")
+            if cover_img_element and 'src' in cover_img_element.attrs:
+                cover_img_url = cover_img_element['src']
+                if not cover_img_url.startswith(('http://', 'https://')):
+                    cover_img_url = urljoin(self.base_url, cover_img_url)
+
+                # Get the file extension
+                ext = cover_img_url.split('.')[-1].lower()
+                if ext not in ['jpg', 'jpeg', 'png', 'webp', 'gif']:
+                    ext = 'jpg'
+                
+                filepath = os.path.join(output_dir, f"cover.{ext}")
+
+                if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
+                    logger.info(f"Skipping cover image - already exists")
+                    return
+
+                logger.info(f"Downloading cover image from: {cover_img_url}")
+                img_response = self.session.get(cover_img_url, headers=self.headers, timeout=10)
+                img_response.raise_for_status()
+
+                with open(filepath, 'wb') as f:
+                    f.write(img_response.content)
+                logger.info(f"Successfully downloaded cover image.")
+            else:
+                logger.warning("Could not find cover image.")
+        except Exception as e:
+            logger.error(f"Failed to download cover image: {e}")
+
     def get_chapter_list_url(self):
         """Generate the full chapter list URL from manga URL"""
         parsed_url = urlparse(self.manga_url)
@@ -99,6 +135,8 @@ class WeebCentralScraper:
             chapter_name = chapter_name.text.strip() if chapter_name else "Unknown Chapter"
             
             if chapter_url:
+                if isinstance(chapter_url, list):
+                    chapter_url = chapter_url[0]
                 if not chapter_url.startswith(('http://', 'https://')):
                     chapter_url = urljoin(self.base_url, chapter_url)
                 
@@ -302,6 +340,35 @@ class WeebCentralScraper:
         pdf.output(pdf_path, "F")
         logger.info(f"Successfully created PDF: {pdf_path}")
 
+    def create_cbz_from_chapter(self, chapter_dir, chapter_name):
+        """Create a CBZ archive from all images in a chapter directory"""
+        logger.info(f"Creating CBZ for chapter: {chapter_name}")
+
+        image_files = sorted([
+            os.path.join(chapter_dir, f)
+            for f in os.listdir(chapter_dir)
+            if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif'))
+        ])
+
+        if not image_files:
+            logger.warning(f"No images found in {chapter_dir} to create CBZ.")
+            return
+
+        cbz_path = os.path.join(self.output_dir, f"{chapter_name}.cbz")
+        with zipfile.ZipFile(cbz_path, 'w') as cbz_file:
+            for image_file in image_files:
+                cbz_file.write(image_file, os.path.basename(image_file))
+        logger.info(f"Successfully created CBZ: {cbz_path}")
+
+    def delete_chapter_images(self, chapter_dir):
+        """Delete all images in a chapter directory"""
+        logger.info(f"Deleting images in: {chapter_dir}")
+        try:
+            shutil.rmtree(chapter_dir)
+            logger.info(f"Successfully deleted directory: {chapter_dir}")
+        except Exception as e:
+            logger.error(f"Failed to delete directory {chapter_dir}: {e}")
+
     def parse_chapter_range(self, total_chapters):
         """Parse chapter range and return list of indices to download"""
         if self.chapter_range is None:
@@ -363,6 +430,9 @@ class WeebCentralScraper:
         self.output_dir = os.path.join(self.output_dir, manga_title_clean)
         os.makedirs(self.output_dir, exist_ok=True)
         
+        # Download cover image
+        self.download_cover_image(soup, self.output_dir)
+        
         # Get all chapters
         self.chapters = self.get_chapters()  # Store chapters in instance variable
         if not self.chapters:
@@ -412,6 +482,11 @@ class WeebCentralScraper:
                             
                             if self.convert_to_pdf and chapter_dir:
                                 self.create_pdf_from_chapter(chapter_dir, chapter['name'])
+                            if self.convert_to_cbz and chapter_dir:
+                                self.create_cbz_from_chapter(chapter_dir, chapter['name'])
+                            
+                            if self.delete_images_after_conversion and chapter_dir:
+                                self.delete_chapter_images(chapter_dir)
                         
                         time.sleep(self.delay)  # Small delay between chapters
                     except Exception as e:
@@ -454,6 +529,8 @@ if __name__ == "__main__":
     delay = float(input("Enter delay between chapters in seconds (default: 1.0): ") or "1.0")
     max_threads = int(input("Enter maximum number of download threads (default: 4): ") or "4")
     convert_to_pdf_choice = input("Convert chapters to PDF? (y/n, default: n): ").lower() == 'y'
+    convert_to_cbz_choice = input("Convert chapters to CBZ? (y/n, default: n): ").lower() == 'y'
+    delete_images_choice = input("Delete images after conversion? (y/n, default: n): ").lower() == 'y'
     
     scraper = WeebCentralScraper(
         manga_url=manga_url,
@@ -461,7 +538,9 @@ if __name__ == "__main__":
         output_dir=output_dir,
         delay=delay,
         max_threads=max_threads,
-        convert_to_pdf=convert_to_pdf_choice
+        convert_to_pdf=convert_to_pdf_choice,
+        convert_to_cbz=convert_to_cbz_choice,
+        delete_images_after_conversion=delete_images_choice
     )
     
     scraper.run()

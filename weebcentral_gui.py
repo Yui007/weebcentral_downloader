@@ -218,10 +218,18 @@ class MainWindow(QMainWindow):
         dir_layout.addWidget(self.browse_btn)
         layout.addLayout(dir_layout)
         
-        # PDF conversion checkbox
-        self.pdf_checkbox = QCheckBox("Convert chapters to PDF")
+        # Conversion options
+        conversion_layout = QHBoxLayout()
+        self.pdf_checkbox = QCheckBox("Convert to PDF")
         self.pdf_checkbox.setStyleSheet("QCheckBox { color: #2c3e50; }")
-        layout.addWidget(self.pdf_checkbox)
+        self.cbz_checkbox = QCheckBox("Convert to CBZ")
+        self.cbz_checkbox.setStyleSheet("QCheckBox { color: #2c3e50; }")
+        self.delete_checkbox = QCheckBox("Delete images after conversion")
+        self.delete_checkbox.setStyleSheet("QCheckBox { color: #2c3e50; }")
+        conversion_layout.addWidget(self.pdf_checkbox)
+        conversion_layout.addWidget(self.cbz_checkbox)
+        conversion_layout.addWidget(self.delete_checkbox)
+        layout.addLayout(conversion_layout)
         
         # Overall progress
         self.overall_progress = QProgressBar()
@@ -303,9 +311,10 @@ class MainWindow(QMainWindow):
         # Clear previous downloads
         while self.downloads_layout.count():
             item = self.downloads_layout.takeAt(0)
-            widget = item.widget()
-            if widget:
-                widget.deleteLater()
+            if item:
+                widget = item.widget()
+                if widget:
+                    widget.deleteLater()
         
         self.overall_progress.setValue(0)
         self.status_label.setText("Starting download...")
@@ -314,7 +323,9 @@ class MainWindow(QMainWindow):
             manga_url=url,
             chapter_range=chapter_range,
             output_dir=output_dir,
-            convert_to_pdf=self.pdf_checkbox.isChecked()
+            convert_to_pdf=self.pdf_checkbox.isChecked(),
+            convert_to_cbz=self.cbz_checkbox.isChecked(),
+            delete_images_after_conversion=self.delete_checkbox.isChecked()
         )
         
         self.download_thread = DownloaderThread(scraper)
@@ -335,24 +346,30 @@ class MainWindow(QMainWindow):
         # Find or create download card
         card = None
         for i in range(self.downloads_layout.count()):
-            widget = self.downloads_layout.itemAt(i).widget()
-            if widget.chapter_label.text() == chapter_name:
-                card = widget
-                break
+            item = self.downloads_layout.itemAt(i)
+            if item:
+                widget = item.widget()
+                if isinstance(widget, DownloadCard) and widget.chapter_label.text() == chapter_name:
+                    card = widget
+                    break
         
         if not card:
             card = DownloadCard(chapter_name)
             self.downloads_layout.insertWidget(0, card)  # Add new cards at the top
         
-        card.progress_bar.setValue(progress)
+        if card:
+            card.progress_bar.setValue(progress)
         
         # Update overall progress
         total_progress = 0
         count = 0
         for i in range(self.downloads_layout.count()):
-            widget = self.downloads_layout.itemAt(i).widget()
-            total_progress += widget.progress_bar.value()
-            count += 1
+            item = self.downloads_layout.itemAt(i)
+            if item:
+                widget = item.widget()
+                if isinstance(widget, DownloadCard):
+                    total_progress += widget.progress_bar.value()
+                    count += 1
         
         if count > 0:
             self.overall_progress.setValue(total_progress // count)

@@ -12,7 +12,8 @@ https://github.com/Yui007/weebcentral_extension
 - **User-Friendly Interface**: Choose between GUI or command-line interface
 - **Flexible Chapter Selection**: Download single chapters, ranges, or entire series
 - **Concurrent Downloads**: Multi-threaded chapter downloading for improved speed
-- **PDF Conversion**: Automatically convert downloaded chapters into PDF files.
+- **PDF & CBZ Conversion**: Automatically convert downloaded chapters into PDF or CBZ files.
+- **Image Deletion**: Option to delete image folders after conversion to save space.
 - **Progress Tracking**: Real-time download progress with status updates
 - **Checkpoint System**: Resume interrupted downloads
 - **Smart Naming**: Automatic folder organization with clean naming
@@ -48,7 +49,8 @@ Run the graphical interface:
 ```bash
 python weebcentral_gui.py
 ```
-- Check the "Convert chapters to PDF" box to enable PDF conversion.
+- Check the "Convert to PDF" or "Convert to CBZ" boxes to enable conversion.
+- Check the "Delete images after conversion" box to remove the original image folders.
 
 ### Command Line Version
 Run the command-line version:
@@ -62,7 +64,8 @@ Follow the prompts to:
 - Choose output directory
 - Set download delay
 - Configure thread count
-- Choose whether to convert to PDF
+- Choose whether to convert to PDF or CBZ
+- Choose whether to delete images after conversion
 
 ## Requirements
 
@@ -84,7 +87,8 @@ Follow the prompts to:
 - **Output Directory**: Default is 'downloads'
 - **Delay**: Time between chapter downloads (default: 1.0s)
 - **Max Threads**: Concurrent chapter downloads (default: 4)
-- **PDF Conversion**: Option to convert chapters to PDF (default: disabled)
+- **PDF/CBZ Conversion**: Options to convert chapters to PDF or CBZ (default: disabled)
+- **Delete Images**: Option to delete image folders after conversion (default: disabled)
 
 ## Screenshots
 ![image](https://github.com/user-attachments/assets/d6635638-7798-43a6-a790-f8eece059dc6)
