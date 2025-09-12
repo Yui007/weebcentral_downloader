@@ -43,74 +43,22 @@ class ModernButton(QPushButton):
         super().__init__(text)
         self.setMinimumHeight(40)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        
         if primary:
-            self.setProperty('class', 'primary')
-        self.setStyleSheet("""
-            QPushButton {
-                border: none;
-                border-radius: 8px;
-                background-color: #2ecc71;
-                color: white;
-                font-weight: bold;
-                padding: 8px 16px;
-            }
-            QPushButton:hover {
-                background-color: #27ae60;
-            }
-            QPushButton[class="primary"] {
-                background-color: #3498db;
-            }
-            QPushButton[class="primary"]:hover {
-                background-color: #2980b9;
-            }
-        """)
+            self.setObjectName("primary")
 
 class ModernInput(QLineEdit):
     def __init__(self, placeholder):
         super().__init__()
         self.setPlaceholderText(placeholder)
         self.setMinimumHeight(40)
-        self.setStyleSheet("""
-            QLineEdit {
-                border: 2px solid #bdc3c7;
-                border-radius: 8px;
-                padding: 8px;
-                background-color: white;
-            }
-            QLineEdit:focus {
-                border: 2px solid #3498db;
-            }
-        """)
 
 class DownloadCard(QFrame):
     def __init__(self, chapter_name):
         super().__init__()
-        self.setStyleSheet("""
-            QFrame {
-                background-color: white;
-                border-radius: 8px;
-                padding: 16px;
-                margin: 8px;
-            }
-        """)
-        
+        self.setObjectName("download_card")
         layout = QVBoxLayout()
         self.chapter_label = QLabel(chapter_name)
         self.progress_bar = QProgressBar()
-        self.progress_bar.setStyleSheet("""
-            QProgressBar {
-                border: none;
-                border-radius: 4px;
-                text-align: center;
-                background-color: #ecf0f1;
-            }
-            QProgressBar::chunk {
-                background-color: #2ecc71;
-                border-radius: 4px;
-            }
-        """)
-        
         layout.addWidget(self.chapter_label)
         layout.addWidget(self.progress_bar)
         self.setLayout(layout)
@@ -120,23 +68,14 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("WeebCentral Manga Downloader")
         self.setMinimumSize(800, 600)
-        self.setStyleSheet("""
-            QMainWindow {
-                background-color: #f5f6fa;
-            }
-            QLabel {
-                color: #2c3e50;
-            }
-            QRadioButton {
-                color: #2c3e50;
-            }
-            QDoubleSpinBox {
-                padding: 5px;
-                border: 1px solid #bdc3c7;
-                border-radius: 4px;
-            }
-        """)
         
+        # Load stylesheet
+        try:
+            with open("stylesheet.qss", "r") as f:
+                self.setStyleSheet(f.read())
+        except FileNotFoundError:
+            print("Stylesheet not found, using default styles.")
+
         # Main widget and layout
         main_widget = QWidget()
         self.setCentralWidget(main_widget)
@@ -146,7 +85,7 @@ class MainWindow(QMainWindow):
         
         # Header
         header = QLabel("WeebCentral Manga Downloader")
-        header.setStyleSheet("font-size: 24px; font-weight: bold; margin-bottom: 20px;")
+        header.setObjectName("header")
         layout.addWidget(header)
         
         # URL input
@@ -221,11 +160,8 @@ class MainWindow(QMainWindow):
         # Conversion options
         conversion_layout = QHBoxLayout()
         self.pdf_checkbox = QCheckBox("Convert to PDF")
-        self.pdf_checkbox.setStyleSheet("QCheckBox { color: #2c3e50; }")
         self.cbz_checkbox = QCheckBox("Convert to CBZ")
-        self.cbz_checkbox.setStyleSheet("QCheckBox { color: #2c3e50; }")
         self.delete_checkbox = QCheckBox("Delete images after conversion")
-        self.delete_checkbox.setStyleSheet("QCheckBox { color: #2c3e50; }")
         conversion_layout.addWidget(self.pdf_checkbox)
         conversion_layout.addWidget(self.cbz_checkbox)
         conversion_layout.addWidget(self.delete_checkbox)
@@ -233,24 +169,10 @@ class MainWindow(QMainWindow):
         
         # Overall progress
         self.overall_progress = QProgressBar()
-        self.overall_progress.setStyleSheet("""
-            QProgressBar {
-                border: none;
-                border-radius: 4px;
-                text-align: center;
-                background-color: #ecf0f1;
-                height: 25px;
-            }
-            QProgressBar::chunk {
-                background-color: #3498db;
-                border-radius: 4px;
-            }
-        """)
         layout.addWidget(self.overall_progress)
         
         # Status label
         self.status_label = QLabel("")
-        self.status_label.setStyleSheet("color: #7f8c8d;")
         layout.addWidget(self.status_label)
         
         # Buttons
@@ -267,16 +189,10 @@ class MainWindow(QMainWindow):
         # Downloads area
         self.downloads_area = QScrollArea()
         self.downloads_widget = QWidget()
+        self.downloads_widget.setObjectName("scroll_widget")
         self.downloads_layout = QVBoxLayout(self.downloads_widget)
         self.downloads_area.setWidget(self.downloads_widget)
         self.downloads_area.setWidgetResizable(True)
-        self.downloads_area.setStyleSheet("""
-            QScrollArea {
-                border: 1px solid #bdc3c7;
-                border-radius: 8px;
-                background: white;
-            }
-        """)
         layout.addWidget(self.downloads_area)
         
         self.download_thread = None

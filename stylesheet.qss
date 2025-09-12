@@ -1,0 +1,186 @@
+/* Main Window */
+QMainWindow {
+    background-color: #1a1a2e; /* Dark blue-purple background */
+}
+
+/* Labels */
+QLabel {
+    color: #e0e0e0; /* Light gray text */
+    font-size: 14px;
+}
+
+/* Header Label */
+QLabel#header {
+    color: #ffffff;
+    font-size: 28px;
+    font-weight: bold;
+    padding: 10px;
+    border-bottom: 1px solid #4a4a6a;
+}
+
+/* Buttons */
+QPushButton {
+    color: #ffffff;
+    background-color: transparent;
+    border: 2px solid #7a5af5; /* Purple border */
+    border-radius: 15px;
+    padding: 10px 20px;
+    font-size: 16px;
+    font-weight: bold;
+    text-transform: uppercase;
+    transition: all 0.3s ease;
+}
+
+QPushButton:hover {
+    background-color: #7a5af5; /* Purple background on hover */
+    color: #ffffff;
+}
+
+QPushButton:pressed {
+    background-color: #5a3af0; /* Darker purple on press */
+}
+
+/* Primary Button */
+QPushButton#primary {
+    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #7a5af5, stop:1 #c73ef0); /* Purple gradient */
+    border: none;
+}
+
+QPushButton#primary:hover {
+    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #8a6af5, stop:1 #d74ef0);
+}
+
+QPushButton#primary:pressed {
+    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #6a4af0, stop:1 #b72ef0);
+}
+
+/* Line Edits */
+QLineEdit {
+    background-color: #2a2a3e;
+    color: #e0e0e0;
+    border: 2px solid #4a4a6a;
+    border-radius: 15px;
+    padding: 10px;
+    font-size: 14px;
+}
+
+QLineEdit:focus {
+    border: 2px solid #7a5af5;
+}
+
+/* Progress Bar */
+QProgressBar {
+    background-color: #2a2a3e;
+    border: 1px solid #4a4a6a;
+    border-radius: 10px;
+    text-align: center;
+    color: #ffffff;
+    font-weight: bold;
+}
+
+QProgressBar::chunk {
+    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #7a5af5, stop:1 #c73ef0); /* Purple gradient */
+    border-radius: 8px;
+}
+
+/* Checkboxes */
+QCheckBox {
+    color: #e0e0e0;
+    font-size: 14px;
+}
+
+QCheckBox::indicator {
+    width: 20px;
+    height: 20px;
+    border: 2px solid #4a4a6a;
+    border-radius: 5px;
+}
+
+QCheckBox::indicator:checked {
+    background-color: #7a5af5;
+    border: 2px solid #7a5af5;
+}
+
+/* Radio Buttons */
+QRadioButton {
+    color: #ffffff;
+    font-size: 14px;
+}
+
+QRadioButton::indicator {
+    width: 20px;
+    height: 20px;
+    border: 2px solid #4a4a6a;
+    border-radius: 10px;
+}
+
+QRadioButton::indicator:checked {
+    background-color: #7a5af5;
+    border: 2px solid #7a5af5;
+}
+
+/* Spin Boxes */
+QDoubleSpinBox {
+    background-color: #2a2a3e;
+    color: #e0e0e0;
+    border: 2px solid #4a4a6a;
+    border-radius: 15px;
+    padding: 10px;
+    font-size: 14px;
+}
+
+QDoubleSpinBox:focus {
+    border: 2px solid #7a5af5;
+}
+
+/* Scroll Area */
+QScrollArea {
+    border: 1px solid #4a4a6a;
+    border-radius: 15px;
+    background-color: #2a2a3e;
+}
+
+QScrollArea > QWidget > QWidget {
+    background-color: #2a2a3e;
+}
+
+QWidget#scroll_widget {
+    background-color: #2a2a3e;
+}
+
+/* Download Card */
+QFrame#download_card {
+    background-color: #2a2a3e;
+    border: 1px solid #4a4a6a;
+    border-radius: 15px;
+    padding: 15px;
+    margin: 10px;
+}
+
+QMessageBox {
+    background-color: #1a1a2e;
+}
+
+QMessageBox QLabel {
+    color: #e0e0e0;
+    font-size: 14px;
+}
+
+QMessageBox QPushButton {
+    color: #ffffff;
+    background-color: #7a5af5;
+    border: none;
+    border-radius: 15px;
+    padding: 10px 20px;
+    font-size: 16px;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+QMessageBox QPushButton:hover {
+    background-color: #8a6af5;
+}
+
+QMessageBox QPushButton:pressed {
+    background-color: #6a4af0;
+}
