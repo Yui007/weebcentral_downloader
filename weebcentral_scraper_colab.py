@@ -11,9 +11,10 @@ import logging
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm.notebook import tqdm  # Using notebook version for Colab
-from IPython.display import display, HTML  # For Colab display
+from IPython.core.display import display, HTML
 import subprocess
 import sys
+import zipfile
 
 # Set up logging
 logging.basicConfig(
@@ -60,15 +61,17 @@ else:
     from selenium.webdriver.support import expected_conditions as EC
 
 class WeebCentralScraper:
-    def __init__(self, manga_url, chapter_range=None, output_dir="downloads", delay=1, max_threads=4):
+    def __init__(self, manga_url, chapter_range=None, output_dir="downloads", delay=1.0, max_threads=4, convert_to_cbz=False, delete_images=False):
         self.base_url = "https://weebcentral.com"
         if not manga_url.startswith(('http://', 'https://')):
             manga_url = 'https://' + manga_url
         self.manga_url = manga_url
         self.chapter_range = chapter_range
         self.output_dir = output_dir
-        self.delay = delay
+        self.delay = float(delay)
         self.max_threads = max_threads
+        self.convert_to_cbz = convert_to_cbz
+        self.delete_images = delete_images
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
             'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
@@ -210,6 +213,8 @@ class WeebCentralScraper:
             chapter_name = chapter_name.text.strip() if chapter_name else "Unknown Chapter"
             
             if chapter_url:
+                if isinstance(chapter_url, list):
+                    chapter_url = chapter_url[0]
                 if not chapter_url.startswith(('http://', 'https://')):
                     chapter_url = urljoin(self.base_url, chapter_url)
                 
@@ -319,7 +324,7 @@ class WeebCentralScraper:
     def download_chapter(self, chapter):
         """Download all images for a chapter"""
         if self.stop_flag():
-            return 0
+            return 0, None
         
         chapter_name = re.sub(r'[\\/*?:"<>|]', '_', chapter['name'])
         chapter_dir = os.path.join(self.output_dir, chapter_name)
@@ -330,7 +335,7 @@ class WeebCentralScraper:
         
         if not image_urls:
             logger.warning(f"No images found for chapter: {chapter['name']}")
-            return 0
+            return 0, None
             
         logger.info(f"Found {len(image_urls)} images")
         
@@ -371,7 +376,36 @@ class WeebCentralScraper:
                             self.progress_callback(chapter['name'], progress)
         
         logger.info(f"Downloaded {downloaded}/{len(image_urls)} images for chapter: {chapter['name']}")
-        return downloaded
+        return downloaded, chapter_dir
+
+    def create_cbz_from_chapter(self, chapter_dir, chapter_name):
+        """Create a CBZ archive from all images in a chapter directory"""
+        logger.info(f"Creating CBZ for chapter: {chapter_name}")
+
+        image_files = sorted([
+            os.path.join(chapter_dir, f)
+            for f in os.listdir(chapter_dir)
+            if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif'))
+        ])
+
+        if not image_files:
+            logger.warning(f"No images found in {chapter_dir} to create CBZ.")
+            return
+
+        cbz_path = os.path.join(self.output_dir, f"{chapter_name}.cbz")
+        with zipfile.ZipFile(cbz_path, 'w') as cbz_file:
+            for image_file in image_files:
+                cbz_file.write(image_file, os.path.basename(image_file))
+        logger.info(f"Successfully created CBZ: {cbz_path}")
+
+    def delete_chapter_images(self, chapter_dir):
+        """Delete all images in a chapter directory"""
+        logger.info(f"Deleting images in: {chapter_dir}")
+        try:
+            shutil.rmtree(chapter_dir)
+            logger.info(f"Successfully deleted directory: {chapter_dir}")
+        except Exception as e:
+            logger.error(f"Failed to delete directory {chapter_dir}: {e}")
 
     def parse_chapter_range(self, total_chapters):
         """Parse chapter range and return list of indices to download"""
@@ -474,11 +508,19 @@ class WeebCentralScraper:
                     
                     chapter = future_to_chapter[future]
                     try:
-                        downloaded = future.result()
-                        total_downloaded += downloaded
-                        # Update checkpoint file
-                        with open(checkpoint_file, 'a') as f:
-                            f.write(f"{chapter['name']}\n")
+                        downloaded, chapter_dir = future.result()
+                        if downloaded > 0:
+                            total_downloaded += downloaded
+                            # Update checkpoint file
+                            with open(checkpoint_file, 'a') as f:
+                                f.write(f"{chapter['name']}\n")
+
+                            if self.convert_to_cbz and chapter_dir:
+                                self.create_cbz_from_chapter(chapter_dir, chapter['name'])
+
+                            if self.delete_images and chapter_dir:
+                                self.delete_chapter_images(chapter_dir)
+
                         time.sleep(self.delay)  # Small delay between chapters
                     except Exception as e:
                         logger.error(f"Error downloading chapter {chapter['name']}: {e}")
@@ -517,6 +559,8 @@ def main():
     output_dir = input("\nEnter output directory (default: manga_downloads): ") or "manga_downloads"
     delay = float(input("Enter delay between chapters in seconds (default: 1.0): ") or "1.0")
     max_threads = int(input("Enter maximum number of download threads (default: 4): ") or "4")
+    convert_to_cbz_choice = input("Convert chapters to CBZ? (y/n, default: n): ").lower() == 'y'
+    delete_images_choice = input("Delete images after conversion? (y/n, default: n): ").lower() == 'y'
     
     # Create and run scraper
     scraper = WeebCentralScraper(
@@ -524,7 +568,9 @@ def main():
         chapter_range=chapter_range,
         output_dir=output_dir,
         delay=delay,
-        max_threads=max_threads
+        max_threads=max_threads,
+        convert_to_cbz=convert_to_cbz_choice,
+        delete_images=delete_images_choice
     )
     
     scraper.run()
