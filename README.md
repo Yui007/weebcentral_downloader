@@ -91,7 +91,7 @@ Follow the prompts to:
 - **Delete Images**: Option to delete image folders after conversion (default: disabled)
 
 ## Screenshots
-![image](https://github.com/user-attachments/assets/d6635638-7798-43a6-a790-f8eece059dc6)
+![GUI](GUI.PNG)
 
 
 
