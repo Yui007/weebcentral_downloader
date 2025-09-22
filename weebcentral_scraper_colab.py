@@ -106,67 +106,34 @@ class WeebCentralScraper:
 
     def get_chrome_driver(self):
         """Configure and return Chrome WebDriver with appropriate options"""
-        import tempfile
-        import uuid
-        import shutil
-        from datetime import datetime
-        
         chrome_options = webdriver.ChromeOptions()
-        
-        # Create a unique temporary directory with timestamp and UUID
-        temp_dir = os.path.join(
-            tempfile.gettempdir(),
-            f'chrome_data_{datetime.now().strftime("%Y%m%d_%H%M%S")}_{uuid.uuid4().hex}'
-        )
-        
-        try:
-            # Ensure the directory is clean
-            if os.path.exists(temp_dir):
-                shutil.rmtree(temp_dir)
-            os.makedirs(temp_dir)
-            
-            # Basic options for both environments
-            chrome_options.add_argument('--headless=new')  # Use new headless mode
-            chrome_options.add_argument('--no-sandbox')
-            chrome_options.add_argument('--disable-dev-shm-usage')
-            chrome_options.add_argument(f'--user-data-dir={temp_dir}')
-            chrome_options.add_argument('--disable-gpu')
-            chrome_options.add_argument('--disable-software-rasterizer')
-            chrome_options.add_argument('--disable-extensions')
-            chrome_options.add_argument('--remote-debugging-port=0')  # Use random port
-            # Add header to disable brotli
-            chrome_options.add_argument('--accept-encoding=gzip, deflate')
-            
-            # Add preference to disable brotli compression
-            chrome_options.add_experimental_option('prefs', {
-                'profile.default_content_settings.cookies': 2,
-                'profile.managed_default_content_settings.images': 1,
-                'profile.default_content_setting_values.notifications': 2
-            })
-            
-            if IN_COLAB:
-                service = Service('/usr/bin/chromedriver')
-                driver = webdriver.Chrome(service=service, options=chrome_options)
-            else:
-                driver = webdriver.Chrome(options=chrome_options)
-            
-            return driver, temp_dir
-        
-        except Exception as e:
-            # Clean up on failure
-            if os.path.exists(temp_dir):
-                shutil.rmtree(temp_dir, ignore_errors=True)
-            raise Exception(f"Failed to create Chrome driver: {str(e)}")
+        chrome_options.add_argument('--headless')
+        chrome_options.add_argument('--disable-gpu')
+        chrome_options.add_argument('--no-sandbox')
+        chrome_options.add_argument('--disable-dev-shm-usage')
+        chrome_options.add_argument(f'user-agent={self.headers["User-Agent"]}')
+        # Add preference to disable brotli compression
+        chrome_options.add_experimental_option('prefs', {
+            'profile.default_content_settings.cookies': 2,
+            'profile.managed_default_content_settings.images': 1,
+            'profile.default_content_setting_values.notifications': 2
+        })
+        # Add header to disable brotli
+        chrome_options.add_argument('--accept-encoding=gzip, deflate')
 
-    def cleanup_chrome(self, driver, temp_dir):
-        """Properly cleanup Chrome instance and its temporary directory"""
+        if IN_COLAB:
+            service = Service('/usr/bin/chromedriver')
+            driver = webdriver.Chrome(service=service, options=chrome_options)
+        else:
+            driver = webdriver.Chrome(options=chrome_options)
+
+        return driver
+
+    def cleanup_chrome(self, driver):
+        """Properly cleanup Chrome instance"""
         try:
             if driver:
                 driver.quit()
-                
-                # Clean up the temporary directory
-                if os.path.exists(temp_dir):
-                    shutil.rmtree(temp_dir, ignore_errors=True)
         except Exception as e:
             logger.error(f"Error during Chrome cleanup: {e}")
 
@@ -200,7 +167,7 @@ class WeebCentralScraper:
             logger.error("Failed to fetch chapter list")
             return []
             
-        soup = BeautifulSoup(response.content, 'html.parser')
+        soup = BeautifulSoup(response.content.decode('utf-8'), 'html.parser')
         chapters = []
         
         # Find all chapter links
@@ -228,48 +195,39 @@ class WeebCentralScraper:
     def get_chapter_images(self, chapter_url):
         """Get list of image URLs for a chapter"""
         logger.info("Loading page with Selenium...")
-        
+
         driver = None
-        temp_dir = None
-        
+
         try:
-            driver, temp_dir = self.get_chrome_driver()
+            driver = self.get_chrome_driver()
             driver.get(chapter_url)
-            
-            # Wait for images to load with explicit wait
-            try:
-                WebDriverWait(driver, 20).until(
-                    lambda x: x.find_elements(By.CSS_SELECTOR, "img[src*='/manga/']")
-                )
-            except Exception as e:
-                logger.warning(f"Timeout waiting for images: {str(e)}")
-            
-            # Additional wait for dynamic content
-            time.sleep(5)
-            
+            time.sleep(3)  # Wait for JavaScript to load
+
+            # Wait for images to load
+            WebDriverWait(driver, 10).until(
+                lambda x: x.find_elements(By.CSS_SELECTOR, "img[src*='/manga/']")
+            )
+
             # Get all image elements
             image_elements = driver.find_elements(By.CSS_SELECTOR, "img[src*='/manga/']")
             image_urls = []
-            
+
             for img in image_elements:
                 url = img.get_attribute('src')
                 if url and not url.startswith('data:'):
                     image_urls.append(url)
-            
+
             logger.info(f"Found {len(image_urls)} images")
             return image_urls
-        
+
         except Exception as e:
             logger.error(f"Error in get_chapter_images: {str(e)}")
             return []
-        
+
         finally:
             try:
                 if driver:
                     driver.quit()
-                if temp_dir and os.path.exists(temp_dir):
-                    import shutil
-                    shutil.rmtree(temp_dir, ignore_errors=True)
             except Exception as e:
                 logger.error(f"Error during cleanup: {str(e)}")
 
@@ -459,7 +417,7 @@ class WeebCentralScraper:
             logger.error("Failed to fetch manga page")
             return False
             
-        soup = BeautifulSoup(response.content, 'html.parser')
+        soup = BeautifulSoup(response.content.decode('utf-8'), 'html.parser')
         manga_title = self.get_manga_title(soup)
         logger.info(f"Manga title: {manga_title}")
         
