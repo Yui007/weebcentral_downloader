@@ -192,44 +192,58 @@ class WeebCentralScraper:
         
         return chapters
 
-    def get_chapter_images(self, chapter_url):
-        """Get list of image URLs for a chapter"""
+    def get_chapter_images(self, chapter_url, max_retries=3):
+        """Get list of image URLs for a chapter with retry functionality"""
         logger.info("Loading page with Selenium...")
 
-        driver = None
+        for attempt in range(max_retries):
+            driver = None
 
-        try:
-            driver = self.get_chrome_driver()
-            driver.get(chapter_url)
-            time.sleep(3)  # Wait for JavaScript to load
-
-            # Wait for images to load
-            WebDriverWait(driver, 10).until(
-                lambda x: x.find_elements(By.CSS_SELECTOR, "img[src*='/manga/']")
-            )
-
-            # Get all image elements
-            image_elements = driver.find_elements(By.CSS_SELECTOR, "img[src*='/manga/']")
-            image_urls = []
-
-            for img in image_elements:
-                url = img.get_attribute('src')
-                if url and not url.startswith('data:'):
-                    image_urls.append(url)
-
-            logger.info(f"Found {len(image_urls)} images")
-            return image_urls
-
-        except Exception as e:
-            logger.error(f"Error in get_chapter_images: {str(e)}")
-            return []
-
-        finally:
             try:
-                if driver:
-                    driver.quit()
+                driver = self.get_chrome_driver()
+                driver.get(chapter_url)
+
+                # Wait for JavaScript to load with progressive delays
+                time.sleep(3 + attempt)  # Increase delay with each retry
+
+                # Wait for images to load
+                WebDriverWait(driver, 10).until(
+                    lambda x: x.find_elements(By.CSS_SELECTOR, "img[src*='/manga/']")
+                )
+
+                # Get all image elements
+                image_elements = driver.find_elements(By.CSS_SELECTOR, "img[src*='/manga/']")
+                image_urls = []
+
+                for img in image_elements:
+                    url = img.get_attribute('src')
+                    if url and not url.startswith('data:'):
+                        image_urls.append(url)
+
+                if image_urls:
+                    logger.info(f"Found {len(image_urls)} images on attempt {attempt + 1}")
+                    return image_urls
+                else:
+                    logger.warning(f"No images found on attempt {attempt + 1}, retrying...")
+
             except Exception as e:
-                logger.error(f"Error during cleanup: {str(e)}")
+                logger.warning(f"Attempt {attempt + 1} failed: {str(e)}")
+                if attempt == max_retries - 1:
+                    logger.error(f"All {max_retries} attempts failed")
+                    return []
+
+            finally:
+                try:
+                    if driver:
+                        driver.quit()
+                except Exception as e:
+                    logger.error(f"Error during cleanup: {str(e)}")
+
+            # Wait before retry
+            if attempt < max_retries - 1:
+                time.sleep(2 * (attempt + 1))  # Progressive delay: 2s, 4s, 6s
+
+        return []
 
     def download_image(self, img_url, filepath, chapter_url):
         """Download a single image"""
