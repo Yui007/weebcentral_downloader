@@ -259,9 +259,9 @@ class WeebCentralScraper:
         logger.info(f"Found {len(image_urls)} images")
         
         # Filter out unwanted images
-        image_urls = [url for url in image_urls if not any(
-            word in url.lower() for word in ['avatar', 'icon', 'logo', 'banner', 'brand']
-        )]
+        # image_urls = [url for url in image_urls if not any(
+        #     word in url.lower() for word in ['icon', 'logo']
+        # )]
         
         # Download images with multiple threads
         downloaded = 0
