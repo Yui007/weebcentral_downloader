@@ -15,6 +15,11 @@ from IPython.core.display import display, HTML
 import subprocess
 import sys
 import zipfile
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
 # Set up logging
 logging.basicConfig(
@@ -24,41 +29,30 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Check if running in Colab
-IN_COLAB = 'google.colab' in sys.modules
-
-# Install required packages for Colab
-if IN_COLAB:
-    def install_chrome():
-        commands = [
-            'apt-get update',
-            'apt-get install -y chromium-chromedriver',
-            'cp /usr/lib/chromium-browser/chromedriver /usr/bin',
-            'chmod +x /usr/bin/chromedriver'
-        ]
-        for cmd in commands:
-            process = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-            if process.returncode != 0:
-                print(f"Error running {cmd}:")
-                print(process.stderr)
-                return False
+# Check if running in Colab - use multiple detection methods
+def is_colab():
+    if 'google.colab' in sys.modules:
         return True
+    if os.path.exists('/content') and os.path.exists('/usr/local/lib/python3.10/dist-packages'):
+        return True
+    if 'COLAB_GPU' in os.environ or 'COLAB_RELEASE_TAG' in os.environ:
+        return True
+    if os.path.exists('/content'):
+        return True
+    return False
 
-    # Install Chrome and ChromeDriver
-    if not install_chrome():
-        raise RuntimeError("Failed to install Chrome/ChromeDriver")
-    
-    # Import Selenium after installation
-    from selenium import webdriver
-    from selenium.webdriver.chrome.service import Service
-    from selenium.webdriver.common.by import By
-    from selenium.webdriver.support.ui import WebDriverWait
-    from selenium.webdriver.support import expected_conditions as EC
-else:
-    from selenium import webdriver
-    from selenium.webdriver.common.by import By
-    from selenium.webdriver.support.ui import WebDriverWait
-    from selenium.webdriver.support import expected_conditions as EC
+IN_COLAB = is_colab()
+
+# Chrome paths for Colab (these are set when Chrome for Testing is installed manually)
+CHROME_BINARY_PATH = '/opt/chrome-linux64/chrome'
+CHROMEDRIVER_PATH = '/opt/chromedriver-linux64/chromedriver'
+
+# Colab-specific: Check if Chrome is installed, warn if not
+if IN_COLAB:
+    if not os.path.exists(CHROME_BINARY_PATH):
+        print("⚠️  Chrome for Testing not found!")
+        print("Please run the Chrome installation cell first.")
+        print("See the notebook instructions for setup commands.")
 
 class WeebCentralScraper:
     def __init__(self, manga_url, chapter_range=None, output_dir="downloads", delay=1.0, max_threads=4, convert_to_cbz=False, delete_images=False):
@@ -73,7 +67,7 @@ class WeebCentralScraper:
         self.convert_to_cbz = convert_to_cbz
         self.delete_images = delete_images
         self.headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
             'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
             'Accept-Language': 'en-US,en;q=0.9',
             'Accept-Encoding': 'gzip, deflate',  # Removed 'br' to fix decoding issues
@@ -91,10 +85,9 @@ class WeebCentralScraper:
                 from google.colab import drive
                 drive.mount('/content/drive')
                 self.output_dir = f'/content/drive/MyDrive/{output_dir}'
-                os.makedirs(self.output_dir, exist_ok=True)
             except Exception as e:
-                logger.error(f"Error setting up Google Drive: {e}")
-                raise
+                logger.warning(f"Could not mount Google Drive: {e}. Using local Colab storage.")
+                self.output_dir = f'/content/{output_dir}'
         
         os.makedirs(self.output_dir, exist_ok=True)
         
@@ -107,35 +100,70 @@ class WeebCentralScraper:
     def get_chrome_driver(self):
         """Configure and return Chrome WebDriver with appropriate options"""
         chrome_options = webdriver.ChromeOptions()
-        chrome_options.add_argument('--headless')
-        chrome_options.add_argument('--disable-gpu')
-        chrome_options.add_argument('--no-sandbox')
-        chrome_options.add_argument('--disable-dev-shm-usage')
-        chrome_options.add_argument(f'user-agent={self.headers["User-Agent"]}')
-        # Add preference to disable brotli compression
-        chrome_options.add_experimental_option('prefs', {
-            'profile.default_content_settings.cookies': 2,
-            'profile.managed_default_content_settings.images': 1,
-            'profile.default_content_setting_values.notifications': 2
-        })
-        # Add header to disable brotli
-        chrome_options.add_argument('--accept-encoding=gzip, deflate')
-
+        
         if IN_COLAB:
-            service = Service('/usr/bin/chromedriver')
-            driver = webdriver.Chrome(service=service, options=chrome_options)
+            # Use undetected-chromedriver to bypass Cloudflare
+            # This library patches Chrome at a deep level to avoid detection
+            try:
+                import undetected_chromedriver as uc
+            except ImportError:
+                logger.info("Installing undetected-chromedriver...")
+                subprocess.run([sys.executable, '-m', 'pip', 'install', 'undetected-chromedriver', '-q'], check=True)
+                import undetected_chromedriver as uc
+            
+            options = uc.ChromeOptions()
+            options.add_argument('--headless=new')
+            options.add_argument('--no-sandbox')
+            options.add_argument('--disable-dev-shm-usage')
+            options.add_argument('--disable-gpu')
+            options.add_argument("--window-size=1920,1080")
+            
+            # undetected-chromedriver will automatically download and patch the correct chromedriver
+            driver = uc.Chrome(
+                options=options,
+                browser_executable_path=CHROME_BINARY_PATH,
+                driver_executable_path=CHROMEDRIVER_PATH,
+                headless=True,
+                use_subprocess=True
+            )
+            logger.info("Undetected Chrome driver initialized successfully.")
         else:
-            driver = webdriver.Chrome(options=chrome_options)
-
+            # Local setup - use new headless mode
+            chrome_options.add_argument('--headless=new')
+            chrome_options.add_argument('--no-sandbox')
+            chrome_options.add_argument('--disable-dev-shm-usage')
+            chrome_options.add_argument('--disable-gpu')
+            chrome_options.add_argument("--window-size=1920,1080")
+            chrome_options.add_argument("--disable-extensions")
+            chrome_options.add_argument(f'user-agent={self.headers["User-Agent"]}')
+            
+            prefs = {
+                "profile.default_content_setting_values.notifications": 2,
+            }
+            chrome_options.add_experimental_option("prefs", prefs)
+            chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
+            
+            try:
+                from selenium.webdriver.chrome.service import Service as ChromeService
+                from webdriver_manager.chrome import ChromeDriverManager
+                service = ChromeService(ChromeDriverManager().install())
+                driver = webdriver.Chrome(service=service, options=chrome_options)
+            except (ImportError, Exception):
+                logger.warning("WebDriver manager not found or failed. Falling back to default ChromeDriver in PATH.")
+                driver = webdriver.Chrome(options=chrome_options)
+        
         return driver
 
     def cleanup_chrome(self, driver):
-        """Properly cleanup Chrome instance"""
+        """Properly cleanup Chrome instance."""
+        if not driver:
+            return
         try:
-            if driver:
-                driver.quit()
+            driver.close()
+            driver.quit()
         except Exception as e:
-            logger.error(f"Error during Chrome cleanup: {e}")
+            # This can happen if the browser has already crashed
+            logger.warning(f"Ignoring error during Chrome cleanup: {e}")
 
     def set_progress_callback(self, callback):
         self.progress_callback = callback
@@ -158,16 +186,27 @@ class WeebCentralScraper:
         return f"{self.base_url}{chapter_list_path}"
 
     def get_chapters(self):
-        """Get list of all chapter URLs"""
+        """Get list of all chapter URLs using Selenium to bypass Cloudflare"""
         chapter_list_url = self.get_chapter_list_url()
         logger.info(f"Fetching chapter list from: {chapter_list_url}")
         
-        response = requests.get(chapter_list_url, headers=self.headers)
-        if response.status_code != 200:
-            logger.error("Failed to fetch chapter list")
-            return []
+        driver = None
+        try:
+            driver = self.get_chrome_driver()
+            driver.get(chapter_list_url)
             
-        soup = BeautifulSoup(response.content.decode('utf-8'), 'html.parser')
+            # Wait for chapter elements to load
+            wait = WebDriverWait(driver, 20)
+            wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div[x-data] > a")))
+            time.sleep(2)  # Extra wait for dynamic content
+            
+            soup = BeautifulSoup(driver.page_source, 'html.parser')
+        except Exception as e:
+            logger.error(f"Failed to fetch chapter list: {e}")
+            return []
+        finally:
+            self.cleanup_chrome(driver)
+            
         chapters = []
         
         # Find all chapter links
@@ -193,32 +232,24 @@ class WeebCentralScraper:
         return chapters
 
     def get_chapter_images(self, chapter_url, max_retries=3):
-        """Get list of image URLs for a chapter with retry functionality"""
+        """Get list of image URLs for a chapter with retry functionality."""
         logger.info("Loading page with Selenium...")
-
+        driver = None
         for attempt in range(max_retries):
-            driver = None
-
             try:
                 driver = self.get_chrome_driver()
                 driver.get(chapter_url)
 
-                # Wait for JavaScript to load with progressive delays
-                time.sleep(3 + attempt)  # Increase delay with each retry
+                # Wait for images to become visible
+                wait = WebDriverWait(driver, 20)
+                wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "img[src*='/manga/']")))
+                
+                # Scroll down to trigger lazy loading
+                driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                time.sleep(3)  # Wait for new images to load
 
-                # Wait for images to load
-                WebDriverWait(driver, 10).until(
-                    lambda x: x.find_elements(By.CSS_SELECTOR, "img[src*='/manga/']")
-                )
-
-                # Get all image elements
                 image_elements = driver.find_elements(By.CSS_SELECTOR, "img[src*='/manga/']")
-                image_urls = []
-
-                for img in image_elements:
-                    url = img.get_attribute('src')
-                    if url and not url.startswith('data:'):
-                        image_urls.append(url)
+                image_urls = [img.get_attribute('src') for img in image_elements if img.get_attribute('src')]
 
                 if image_urls:
                     logger.info(f"Found {len(image_urls)} images on attempt {attempt + 1}")
@@ -227,21 +258,16 @@ class WeebCentralScraper:
                     logger.warning(f"No images found on attempt {attempt + 1}, retrying...")
 
             except Exception as e:
-                logger.warning(f"Attempt {attempt + 1} failed: {str(e)}")
+                logger.warning(f"Attempt {attempt + 1} failed: {e}")
                 if attempt == max_retries - 1:
-                    logger.error(f"All {max_retries} attempts failed")
+                    logger.error("All attempts to get chapter images failed.")
                     return []
-
             finally:
-                try:
-                    if driver:
-                        driver.quit()
-                except Exception as e:
-                    logger.error(f"Error during cleanup: {str(e)}")
+                self.cleanup_chrome(driver)
 
-            # Wait before retry
+            # Wait before retrying
             if attempt < max_retries - 1:
-                time.sleep(2 * (attempt + 1))  # Progressive delay: 2s, 4s, 6s
+                time.sleep(3 * (attempt + 1))
 
         return []
 
@@ -312,9 +338,11 @@ class WeebCentralScraper:
         logger.info(f"Found {len(image_urls)} images")
         
         # Filter out unwanted images
-        image_urls = [url for url in image_urls if not any(
-            word in url.lower() for word in ['avatar', 'icon', 'logo', 'banner', 'brand']
-        )]
+        image_urls = [
+            url for url in image_urls if url and not any(
+                word in url.lower() for word in ['avatar', 'icon', 'logo', 'banner', 'brand']
+            )
+        ]
         
         # Download images with multiple threads
         downloaded = 0
@@ -326,7 +354,9 @@ class WeebCentralScraper:
                 future_to_url = {}
                 
                 for index, url in enumerate(image_urls, 1):
-                    ext = url.split('.')[-1].lower()
+                    if not url:
+                        continue
+                    ext = url.split('.')[-1].lower() if '.' in url else 'jpg'
                     if ext not in ['jpg', 'jpeg', 'png', 'webp', 'gif']:
                         ext = 'jpg'
                     
@@ -425,13 +455,44 @@ class WeebCentralScraper:
         """Run the full scraping process"""
         logger.info(f"Starting to scrape manga from: {self.manga_url}")
         
-        # Get manga page
-        response = requests.get(self.manga_url, headers=self.headers)
-        if response.status_code != 200:
-            logger.error("Failed to fetch manga page")
-            return False
+        # Get manga page using Selenium to bypass Cloudflare
+        driver = None
+        try:
+            logger.info("Initializing Chrome Driver in run()...")
+            driver = self.get_chrome_driver()
+            logger.info("Chrome Driver initialized successfully.")
             
-        soup = BeautifulSoup(response.content.decode('utf-8'), 'html.parser')
+            logger.info(f"Navigating to {self.manga_url}...")
+            driver.get(self.manga_url)
+            logger.info("Navigation command sent.")
+            
+            # Wait for main content to load
+            logger.info("Waiting for page content (section[x-data])...")
+            wait = WebDriverWait(driver, 30) # Increased timeout
+            wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "section[x-data]")))
+            logger.info("Page element found.")
+            
+            time.sleep(5)  # Extra wait for dynamic content/Cloudflare challenge
+            logger.info("Finished extra wait.")
+            
+            soup = BeautifulSoup(driver.page_source, 'html.parser')
+            logger.info("Parsed page source with BeautifulSoup.")
+            
+        except Exception as e:
+            logger.error(f"Failed to fetch manga page: {e}")
+            if driver:
+                try:
+                    logger.info("Attempting to capture screenshot of failure...")
+                    driver.save_screenshot("debug_failure.png")
+                    logger.info("Screenshot saved to debug_failure.png")
+                    logger.info(f"Current URL: {driver.current_url}")
+                    logger.info(f"Page Title: {driver.title}")
+                except Exception as sc_e:
+                    logger.error(f"Failed to capture debug info: {sc_e}")
+            return False
+        finally:
+            self.cleanup_chrome(driver)
+            
         manga_title = self.get_manga_title(soup)
         logger.info(f"Manga title: {manga_title}")
         
