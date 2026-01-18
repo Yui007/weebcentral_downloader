@@ -337,7 +337,7 @@ class WeebCentralScraper:
                 logger.error(f"Failed to process image {image_file}: {e}")
 
         pdf_path = os.path.join(self.output_dir, f"{chapter_name}.pdf")
-        pdf.output(pdf_path, "F")
+        pdf.output(pdf_path)
         logger.info(f"Successfully created PDF: {pdf_path}")
 
     def create_cbz_from_chapter(self, chapter_dir, chapter_name):
