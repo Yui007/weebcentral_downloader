@@ -1,108 +1,206 @@
-# WeebCentral Manga Downloader
+<div align="center">
 
-A powerful and user-friendly manga downloader specifically designed for WeebCentral. Features both GUI and command-line interfaces for downloading manga chapters efficiently with multi-threading support.
+# 📚 WeebCentral Manga Downloader
 
-# Extension
+**A powerful, modern manga downloader with a stunning Neon Noir GUI**
 
-I also created an extension if you dont want to use the script.
-https://github.com/Yui007/weebcentral_extension
+[![Python](https://img.shields.io/badge/Python-3.8+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
+[![PyQt6](https://img.shields.io/badge/PyQt6-GUI-41CD52?style=for-the-badge&logo=qt&logoColor=white)](https://pypi.org/project/PyQt6/)
+[![License](https://img.shields.io/badge/License-MIT-00D4AA?style=for-the-badge)](LICENSE)
+[![Open In Colab](https://img.shields.io/badge/Google-Colab-F9AB00?style=for-the-badge&logo=googlecolab&logoColor=white)](https://colab.research.google.com/github/Yui007/weebcentral_downloader/blob/main/colab_run.ipynb)
 
-## Features
+<br>
 
-- **User-Friendly Interface**: Choose between GUI or command-line interface
-- **Flexible Chapter Selection**: Download single chapters, ranges, or entire series
-- **Concurrent Downloads**: Multi-threaded chapter downloading for improved speed
-- **PDF & CBZ Conversion**: Automatically convert downloaded chapters into PDF or CBZ files.
-- **Image Deletion**: Option to delete image folders after conversion to save space.
-- **Progress Tracking**: Real-time download progress with status updates
-- **Checkpoint System**: Resume interrupted downloads
-- **Smart Naming**: Automatic folder organization with clean naming
-- **Error Handling**: Robust error recovery and logging system
-- **Google Colab Support**: Run directly in Google Colab for cloud-based downloading
+![GUI Preview](GUI.PNG)
 
-## Installation
+<br>
 
-1. Clone the repository:
+🧩 **Don't want to use a script?** Try the [Browser Extension](https://github.com/Yui007/weebcentral_extension)!
+
+</div>
+
+---
+
+<div align="center">
+
+## ✨ Features
+
+</div>
+
+<table align="center">
+<tr>
+<td width="50%">
+
+### 🎨 Modern GUI
+- **Neon Noir** design with cyan/magenta accents
+- Animated buttons with glow effects
+- Smooth transitions and glassmorphism panels
+- Real-time progress bars per chapter
+
+</td>
+<td width="50%">
+
+### ⚡ Performance
+- **Parallel chapter downloads** (1-8 concurrent)
+- **Parallel image downloads** (1-10 per chapter)
+- Checkpoint system for resume
+- Smart caching and retry logic
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+### 📖 Chapter Selection
+- Download single chapter: `5` or `23.5`
+- Download range: `1-50` or `5.5-15.5`
+- Quick range input: `1,5,10-20`
+- Select all with one click
+
+</td>
+<td width="50%">
+
+### 📦 Export Options
+- **PDF conversion** with proper sizing
+- **CBZ archives** for comic readers
+- Auto-delete images after conversion
+- Organized folder structure
+
+</td>
+</tr>
+</table>
+
+---
+
+## 🚀 Quick Start
+
+### Installation
+
 ```bash
+# Clone the repository
 git clone https://github.com/Yui007/weebcentral_downloader.git
 cd weebcentral_downloader
-```
 
-2. Install required dependencies:
-```bash
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-## Usage
+### Launch the GUI
 
-### Google Colab (Recommended)
-Run the scraper directly in Google Colab:
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Yui007/weebcentral_downloader/blob/main/colab_run.ipynb)
-
-1. Click the "Open in Colab" button above
-2. Run the cells in order
-3. Follow the prompts to download your manga
-4. Use the provided compression tools for easier downloading
-
-### GUI Version
-Run the graphical interface:
 ```bash
-python weebcentral_gui.py
+python run_gui.py
 ```
-- Check the "Convert to PDF" or "Convert to CBZ" boxes to enable conversion.
-- Check the "Delete images after conversion" box to remove the original image folders.
 
-### Command Line Version
-Run the command-line version:
+### Or use Command Line
+
 ```bash
 python weebcentral_scraper.py
 ```
 
-Follow the prompts to:
-- Enter manga URL
-- Select chapters (single, range, or all)
-- Choose output directory
-- Set download delay
-- Configure thread count
-- Choose whether to convert to PDF or CBZ
-- Choose whether to delete images after conversion
+---
 
-## Requirements
+## 🎮 GUI Overview
 
-- Python 3.6+
-- requests>=2.31.0
-- beautifulsoup4>=4.12.0
-- selenium>=4.15.0
-- tqdm>=4.66.1
-- PyQt6>=6.5.0
-- fpdf2>=2.7.4
-- Pillow>=9.3.0
+| Tab | Description |
+|-----|-------------|
+| 🔗 **URL Input** | Paste manga URL, view recent history, fetch manga info |
+| 📖 **Manga Info** | View cover, metadata, tags, and select chapters to download |
+| ⬇️ **Downloads** | Real-time progress bars, parallel downloads, cancel option |
+| ⚙️ **Settings** | Configure threads, delay, output folder, conversion options |
 
-## Configuration Options
+### Settings Available
 
-- **Chapter Selection**: 
-  - Single chapter: '5' or '23.5'
-  - Range: '1-10' or '5.5-15.5'
-  - All chapters: Press Enter
-- **Output Directory**: Default is 'downloads'
-- **Delay**: Time between chapter downloads (default: 1.0s)
-- **Max Threads**: Concurrent chapter downloads (default: 4)
-- **PDF/CBZ Conversion**: Options to convert chapters to PDF or CBZ (default: disabled)
-- **Delete Images**: Option to delete image folders after conversion (default: disabled)
+| Setting | Range | Description |
+|---------|-------|-------------|
+| Concurrent Chapters | 1-8 | How many chapters download in parallel |
+| Concurrent Images | 1-10 | Images per chapter downloaded simultaneously |
+| Request Delay | 0.5-5.0s | Delay between requests |
+| Convert to PDF | ✓/✗ | Auto-convert chapters to PDF |
+| Convert to CBZ | ✓/✗ | Auto-convert chapters to CBZ |
+| Delete After | ✓/✗ | Remove images after conversion |
 
-## Screenshots
-![GUI](GUI.PNG)
+---
 
+## ☁️ Google Colab
 
+Run directly in your browser - no installation needed!
 
-## Contributing
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Yui007/weebcentral_downloader/blob/main/colab_run.ipynb)
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+1. Click the badge above
+2. Run cells in order
+3. Follow prompts to download
+4. Use compression tools for easier export
 
-## Disclaimer
+---
 
-This tool is for educational purposes only. Please respect the terms of service of the websites you interact with.
+## 📁 Project Structure
 
-## Support
+```
+weebcentral_downloader/
+├── run_gui.py              # GUI entry point
+├── weebcentral_scraper.py  # CLI & core scraper
+├── weebcentral_gui.py      # Legacy GUI (deprecated)
+├── gui/
+│   ├── __init__.py         # App initialization
+│   ├── main_window.py      # Main window & navigation
+│   ├── theme.py            # Neon Noir design system
+│   ├── config.py           # JSON settings manager
+│   ├── animations.py       # Glow & fade effects
+│   ├── components/         # Reusable widgets
+│   │   ├── animated_button.py
+│   │   ├── animated_input.py
+│   │   ├── chapter_list.py
+│   │   ├── download_card.py
+│   │   └── manga_info_card.py
+│   ├── tabs/               # Tab views
+│   │   ├── url_input_tab.py
+│   │   ├── manga_info_tab.py
+│   │   ├── downloads_tab.py
+│   │   └── settings_tab.py
+│   └── workers/            # Background threads
+│       ├── scraper_worker.py
+│       └── download_worker.py
+└── downloads/              # Default output folder
+```
 
-For issues, questions, or suggestions, please open an issue in the GitHub repository.
+---
+
+## 📋 Requirements
+
+```
+Python >= 3.8
+requests >= 2.31.0
+beautifulsoup4 >= 4.12.0
+selenium >= 4.15.0
+tqdm >= 4.66.1
+PyQt6 >= 6.5.0
+fpdf2 >= 2.7.4
+Pillow >= 9.3.0
+```
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Feel free to:
+
+- 🐛 Report bugs
+- 💡 Suggest features
+- 🔧 Submit pull requests
+
+---
+
+## ⚠️ Disclaimer
+
+This tool is for **educational purposes only**. Please respect the terms of service of the websites you interact with.
+
+---
+
+<div align="center">
+
+**Made with ❤️ by [Yui007](https://github.com/Yui007)**
+
+⭐ Star this repo if you find it useful!
+
+</div>
