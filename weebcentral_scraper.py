@@ -16,6 +16,8 @@ from fpdf import FPDF
 from PIL import Image
 import zipfile
 import shutil
+import base64
+from ebooklib import epub
 
 # Set up logging
 logging.basicConfig(
@@ -26,7 +28,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class WeebCentralScraper:
-    def __init__(self, manga_url, chapter_range=None, output_dir="downloads", delay=1.0, max_threads=4, convert_to_pdf=False, convert_to_cbz=False, delete_images_after_conversion=False):
+    def __init__(self, manga_url, chapter_range=None, output_dir="downloads", delay=1.0, max_threads=4, convert_to_pdf=False, convert_to_cbz=False, convert_to_epub=False, merge_chapters=False, delete_images_after_conversion=False):
         self.base_url = "https://weebcentral.com"
         if not manga_url.startswith(('http://', 'https://')):
             manga_url = 'https://' + manga_url
@@ -37,7 +39,10 @@ class WeebCentralScraper:
         self.max_threads = max_threads
         self.convert_to_pdf = convert_to_pdf
         self.convert_to_cbz = convert_to_cbz
+        self.convert_to_epub = convert_to_epub
+        self.merge_chapters = merge_chapters
         self.delete_images_after_conversion = delete_images_after_conversion
+        self.downloaded_chapter_dirs = []  # Track chapter dirs for merging
         
         # Enhanced headers
         self.headers = {
@@ -369,6 +374,210 @@ class WeebCentralScraper:
         except Exception as e:
             logger.error(f"Failed to delete directory {chapter_dir}: {e}")
 
+    def create_epub_from_chapter(self, chapter_dir, chapter_name, manga_title=None):
+        """Create an EPUB from all images in a chapter directory"""
+        logger.info(f"Creating EPUB for chapter: {chapter_name}")
+        
+        try:
+            image_files = sorted([
+                os.path.join(chapter_dir, f)
+                for f in os.listdir(chapter_dir)
+                if f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif'))
+            ])
+            
+            if not image_files:
+                logger.warning(f"No images found in {chapter_dir} to create EPUB.")
+                return
+            
+            book = epub.EpubBook()
+            identifier = f'{manga_title or "manga"}-{chapter_name}'.replace(' ', '-').replace('/', '-')
+            book.set_identifier(identifier)
+            book.set_title(f'{manga_title or "Manga"} - {chapter_name}')
+            book.set_language('en')
+            book.add_author('WeebCentral Downloader')
+            
+            spine = ['nav']
+            toc = []
+            
+            for i, image_file in enumerate(image_files, 1):
+                # Read and encode image
+                with open(image_file, 'rb') as f:
+                    img_data = f.read()
+                
+                ext = os.path.splitext(image_file)[1].lower()
+                media_type = {
+                    '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+                    '.png': 'image/png', '.gif': 'image/gif'
+                }.get(ext, 'image/jpeg')
+                
+                # Add image to epub
+                img_item = epub.EpubItem(
+                    uid=f'img_{i}',
+                    file_name=f'images/page_{i:03d}{ext}',
+                    media_type=media_type,
+                    content=img_data
+                )
+                book.add_item(img_item)
+                
+                # Create HTML page for image
+                page = epub.EpubHtml(title=f'Page {i}', file_name=f'page_{i:03d}.xhtml')
+                page.content = f'''<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>Page {i}</title>
+<style>body{{margin:0;padding:0;text-align:center;background:#000;}}
+img{{max-width:100%;max-height:100vh;object-fit:contain;}}</style>
+</head>
+<body><img src="images/page_{i:03d}{ext}" alt="Page {i}"/></body>
+</html>'''
+                book.add_item(page)
+                spine.append(page)
+                
+                # Add first page to TOC
+                if i == 1:
+                    toc.append(epub.Link(page.file_name, chapter_name, 'intro'))
+            
+            book.toc = toc
+            book.add_item(epub.EpubNcx())
+            book.add_item(epub.EpubNav())
+            book.spine = spine
+            
+            # Clean chapter name for file
+            chapter_name_clean = re.sub(r'[\\/*?:"<>|]', '_', chapter_name)
+            epub_path = os.path.join(self.output_dir, f"{chapter_name_clean}.epub")
+            epub.write_epub(epub_path, book, {})
+            logger.info(f"Successfully created EPUB: {epub_path}")
+        except Exception as e:
+            logger.error(f"Failed to create EPUB for {chapter_name}: {e}")
+
+    def create_merged_pdf(self, chapter_dirs, manga_title):
+        """Create a single merged PDF from all chapter directories"""
+        logger.info(f"Creating merged PDF for: {manga_title}")
+        
+        pdf = FPDF()
+        
+        for chapter_dir, chapter_name in sorted(chapter_dirs, key=lambda x: self.extract_chapter_number(x[1])):
+            if not os.path.exists(chapter_dir):
+                continue
+                
+            image_files = sorted([
+                os.path.join(chapter_dir, f)
+                for f in os.listdir(chapter_dir)
+                if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif'))
+            ])
+            
+            for image_file in image_files:
+                try:
+                    with Image.open(image_file) as img:
+                        width, height = img.size
+                        if width > height:
+                            w, h = 297, 210
+                        else:
+                            w, h = 210, 297
+                        
+                        w_new, h_new = w, h
+                        if width / height > w / h:
+                            h_new = w * height / width
+                        else:
+                            w_new = h * width / height
+                            
+                        pdf.add_page()
+                        pdf.image(image_file, x=(w - w_new) / 2, y=(h - h_new) / 2, w=w_new, h=h_new)
+                except Exception as e:
+                    logger.error(f"Failed to process image {image_file}: {e}")
+        
+        pdf_path = os.path.join(self.output_dir, f"{manga_title}.pdf")
+        pdf.output(pdf_path)
+        logger.info(f"Successfully created merged PDF: {pdf_path}")
+
+    def create_merged_cbz(self, chapter_dirs, manga_title):
+        """Create a single merged CBZ from all chapter directories"""
+        logger.info(f"Creating merged CBZ for: {manga_title}")
+        
+        cbz_path = os.path.join(self.output_dir, f"{manga_title}.cbz")
+        with zipfile.ZipFile(cbz_path, 'w') as cbz_file:
+            for chapter_dir, chapter_name in sorted(chapter_dirs, key=lambda x: self.extract_chapter_number(x[1])):
+                if not os.path.exists(chapter_dir):
+                    continue
+                    
+                image_files = sorted([
+                    os.path.join(chapter_dir, f)
+                    for f in os.listdir(chapter_dir)
+                    if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif'))
+                ])
+                
+                # Create chapter folder inside CBZ
+                chapter_folder = re.sub(r'[\\/*?:"<>|]', '_', chapter_name)
+                for image_file in image_files:
+                    cbz_file.write(image_file, f"{chapter_folder}/{os.path.basename(image_file)}")
+        
+        logger.info(f"Successfully created merged CBZ: {cbz_path}")
+
+    def create_merged_epub(self, chapter_dirs, manga_title):
+        """Create a single merged EPUB from all chapter directories"""
+        logger.info(f"Creating merged EPUB for: {manga_title}")
+        
+        book = epub.EpubBook()
+        book.set_identifier(manga_title.replace(' ', '-'))
+        book.set_title(manga_title)
+        book.set_language('en')
+        
+        spine = ['nav']
+        toc = []
+        img_counter = 1
+        
+        for chapter_dir, chapter_name in sorted(chapter_dirs, key=lambda x: self.extract_chapter_number(x[1])):
+            if not os.path.exists(chapter_dir):
+                continue
+                
+            image_files = sorted([
+                os.path.join(chapter_dir, f)
+                for f in os.listdir(chapter_dir)
+                if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif'))
+            ])
+            
+            chapter_pages = []
+            for image_file in image_files:
+                with open(image_file, 'rb') as f:
+                    img_data = f.read()
+                
+                ext = os.path.splitext(image_file)[1].lower()
+                media_type = {
+                    '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+                    '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif'
+                }.get(ext, 'image/jpeg')
+                
+                img_item = epub.EpubItem(
+                    uid=f'img_{img_counter}',
+                    file_name=f'images/page_{img_counter:04d}{ext}',
+                    media_type=media_type,
+                    content=img_data
+                )
+                book.add_item(img_item)
+                
+                page = epub.EpubHtml(title=f'{chapter_name} - Page {img_counter}', file_name=f'page_{img_counter:04d}.xhtml')
+                page.content = f'''<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>{chapter_name}</title>
+<style>body{{margin:0;padding:0;text-align:center;background:#000;}}
+img{{max-width:100%;max-height:100vh;object-fit:contain;}}</style>
+</head>
+<body><img src="images/page_{img_counter:04d}{ext}" alt="{chapter_name}"/></body>
+</html>'''
+                book.add_item(page)
+                spine.append(page)
+                chapter_pages.append(page)
+                img_counter += 1
+            
+            if chapter_pages:
+                toc.append(epub.Link(chapter_pages[0].file_name, chapter_name, chapter_name.replace(' ', '-')))
+        
+        book.toc = toc
+        book.add_item(epub.EpubNcx())
+        book.add_item(epub.EpubNav())
+        book.spine = spine
+        
+        epub_path = os.path.join(self.output_dir, f"{manga_title}.epub")
+        epub.write_epub(epub_path, book, {})
+        logger.info(f"Successfully created merged EPUB: {epub_path}")
+
     def parse_chapter_range(self, total_chapters):
         """Parse chapter range and return list of indices to download"""
         if self.chapter_range is None:
@@ -459,6 +668,9 @@ class WeebCentralScraper:
         
         # Download chapters concurrently
         total_downloaded = 0
+        self.downloaded_chapter_dirs = []  # Reset for this run
+        self.manga_title_clean = manga_title_clean  # Store for merge functions
+        
         try:
             with ThreadPoolExecutor(max_workers=3) as executor:  # Limit to 3 concurrent chapter downloads
                 future_to_chapter = {
@@ -476,21 +688,46 @@ class WeebCentralScraper:
                         downloaded, chapter_dir = future.result()
                         if downloaded > 0:
                             total_downloaded += downloaded
+                            # Track chapter dir for potential merging
+                            if chapter_dir:
+                                self.downloaded_chapter_dirs.append((chapter_dir, chapter['name']))
+                            
                             # Update checkpoint file
                             with open(checkpoint_file, 'a') as f:
                                 f.write(f"{chapter['name']}\n")
                             
-                            if self.convert_to_pdf and chapter_dir:
-                                self.create_pdf_from_chapter(chapter_dir, chapter['name'])
-                            if self.convert_to_cbz and chapter_dir:
-                                self.create_cbz_from_chapter(chapter_dir, chapter['name'])
-                            
-                            if self.delete_images_after_conversion and chapter_dir:
-                                self.delete_chapter_images(chapter_dir)
+                            # Only create per-chapter files if NOT merging
+                            if not self.merge_chapters:
+                                if self.convert_to_pdf and chapter_dir:
+                                    self.create_pdf_from_chapter(chapter_dir, chapter['name'])
+                                if self.convert_to_cbz and chapter_dir:
+                                    self.create_cbz_from_chapter(chapter_dir, chapter['name'])
+                                if self.convert_to_epub and chapter_dir:
+                                    self.create_epub_from_chapter(chapter_dir, chapter['name'], manga_title)
+                                
+                                if self.delete_images_after_conversion and chapter_dir:
+                                    if self.convert_to_pdf or self.convert_to_cbz or self.convert_to_epub:
+                                        self.delete_chapter_images(chapter_dir)
                         
                         time.sleep(self.delay)  # Small delay between chapters
                     except Exception as e:
                         logger.error(f"Error downloading chapter {chapter['name']}: {e}")
+            
+            # After all chapters downloaded, create merged files if enabled
+            if self.merge_chapters and self.downloaded_chapter_dirs:
+                logger.info("Creating merged files...")
+                if self.convert_to_pdf:
+                    self.create_merged_pdf(self.downloaded_chapter_dirs, manga_title_clean)
+                if self.convert_to_cbz:
+                    self.create_merged_cbz(self.downloaded_chapter_dirs, manga_title_clean)
+                if self.convert_to_epub:
+                    self.create_merged_epub(self.downloaded_chapter_dirs, manga_title_clean)
+                
+                # Delete chapter images after merge if enabled
+                if self.delete_images_after_conversion:
+                    for chapter_dir, _ in self.downloaded_chapter_dirs:
+                        if os.path.exists(chapter_dir):
+                            self.delete_chapter_images(chapter_dir)
             
             logger.info(f"Completed downloading {manga_title}. Total images: {total_downloaded}")
             return True

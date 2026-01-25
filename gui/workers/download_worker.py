@@ -38,11 +38,13 @@ class DownloadWorker(QThread):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._manga_url = ""
+        self._manga_title = ""  # Store manga title for merge
         self._chapters: List[Dict] = []
         self._is_running = False
         self._output_dir = None
         self._lock = threading.Lock()
         self._completed_count = 0
+        self._downloaded_chapter_dirs = []  # Track chapter dirs for merging
         
         # Progress tracking per chapter
         self._chapter_progress: Dict[str, Dict] = {}  # {name: {total: int, downloaded: int}}
@@ -51,12 +53,14 @@ class DownloadWorker(QThread):
         self, 
         manga_url: str, 
         chapters: List[Dict],
-        output_dir: Optional[str] = None
+        output_dir: Optional[str] = None,
+        manga_title: str = ""
     ):
         """Set the download parameters."""
         self._manga_url = manga_url
         self._chapters = chapters
         self._output_dir = output_dir
+        self._manga_title = manga_title
     
     def _emit_progress(self, chapter_name: str, downloaded: int, total: int):
         """Thread-safe progress emission."""
@@ -64,10 +68,13 @@ class DownloadWorker(QThread):
             progress = int((downloaded / total) * 100)
             self.chapter_progress.emit(chapter_name, progress)
     
-    def _download_single_chapter(self, chapter: Dict, settings) -> bool:
-        """Download a single chapter with proper progress tracking."""
+    def _download_single_chapter(self, chapter: Dict, settings, scraper_base) -> tuple:
+        """Download a single chapter with proper progress tracking.
+        Returns: (success: bool, chapter_dir: str or None, chapter_name: str)
+        """
         if not self._is_running:
-            return False
+            chapter_name = chapter.get("name", "Unknown")
+            return False, None, chapter_name
         
         chapter_name = chapter.get("name", "Unknown")
         chapter_url = chapter.get("url", "")
@@ -98,7 +105,7 @@ class DownloadWorker(QThread):
             
             if not image_urls:
                 self.chapter_finished.emit(chapter_name, False)
-                return False
+                return False, None, chapter_name
             
             total_images = len(image_urls)
             downloaded_count = 0
@@ -134,13 +141,17 @@ class DownloadWorker(QThread):
             success = downloaded_count > 0
             
             if success:
-                # Handle conversions
-                if settings.convert_to_pdf:
-                    scraper.create_pdf_from_chapter(chapter_dir, chapter_name)
-                if settings.convert_to_cbz:
-                    scraper.create_cbz_from_chapter(chapter_dir, chapter_name)
-                if settings.delete_images_after_conversion:
-                    scraper.delete_chapter_images(chapter_dir)
+                # Handle conversions only if NOT merging
+                if not settings.merge_chapters:
+                    if settings.convert_to_pdf:
+                        scraper.create_pdf_from_chapter(chapter_dir, chapter_name)
+                    if settings.convert_to_cbz:
+                        scraper.create_cbz_from_chapter(chapter_dir, chapter_name)
+                    if settings.convert_to_epub:
+                        scraper.create_epub_from_chapter(chapter_dir, chapter_name)
+                    if settings.delete_images_after_conversion:
+                        if settings.convert_to_pdf or settings.convert_to_cbz or settings.convert_to_epub:
+                            scraper.delete_chapter_images(chapter_dir)
                 
                 self.chapter_finished.emit(chapter_name, True)
                 
@@ -151,23 +162,37 @@ class DownloadWorker(QThread):
             else:
                 self.chapter_finished.emit(chapter_name, False)
             
-            return success
+            return success, chapter_dir if success else None, chapter_name
                 
         except Exception as e:
             self.error.emit(chapter_name, str(e))
             self.chapter_finished.emit(chapter_name, False)
-            return False
+            return False, None, chapter_name
     
     def run(self):
         """Execute the download operation with parallel chapter downloads."""
         self._is_running = True
         self._completed_count = 0
+        self._downloaded_chapter_dirs = []  # Reset for this run
         self.started_signal.emit()
         
         settings = get_settings()
         
         total_chapters = len(self._chapters)
         successful = 0
+        
+        # Create a base scraper for merge functions
+        scraper_base = WeebCentralScraper(
+            manga_url=self._manga_url,
+            output_dir=self._output_dir or settings.output_dir,
+            delay=settings.delay,
+            max_threads=settings.max_image_threads,
+            convert_to_pdf=settings.convert_to_pdf,
+            convert_to_cbz=settings.convert_to_cbz,
+            convert_to_epub=settings.convert_to_epub,
+            merge_chapters=settings.merge_chapters,
+            delete_images_after_conversion=settings.delete_images_after_conversion
+        )
         
         try:
             # Use ThreadPoolExecutor for parallel chapter downloads
@@ -176,7 +201,7 @@ class DownloadWorker(QThread):
             with ThreadPoolExecutor(max_workers=max_concurrent) as executor:
                 # Submit all chapter downloads
                 future_to_chapter = {
-                    executor.submit(self._download_single_chapter, chapter, settings): chapter
+                    executor.submit(self._download_single_chapter, chapter, settings, scraper_base): chapter
                     for chapter in self._chapters
                 }
                 
@@ -189,11 +214,40 @@ class DownloadWorker(QThread):
                     
                     chapter = future_to_chapter[future]
                     try:
-                        if future.result():
+                        result = future.result()
+                        success, chapter_dir, chapter_name = result
+                        if success:
                             successful += 1
+                            if chapter_dir:
+                                self._downloaded_chapter_dirs.append((chapter_dir, chapter_name))
                     except Exception as e:
                         chapter_name = chapter.get("name", "Unknown")
                         self.error.emit(chapter_name, str(e))
+            
+            # After all chapters complete, create merged files if enabled
+            if settings.merge_chapters and self._downloaded_chapter_dirs:
+                # Use stored manga title, clean it for filename
+                manga_title = re.sub(r'[\\/*?:"<>|]', '_', self._manga_title) if self._manga_title else "manga"
+                
+                # Get proper output dir from first downloaded chapter (parent of chapter dir)
+                first_chapter_dir = self._downloaded_chapter_dirs[0][0]
+                merge_output_dir = os.path.dirname(first_chapter_dir)
+                
+                # Update scraper output_dir for merge functions
+                scraper_base.output_dir = merge_output_dir
+                
+                if settings.convert_to_pdf:
+                    scraper_base.create_merged_pdf(self._downloaded_chapter_dirs, manga_title)
+                if settings.convert_to_cbz:
+                    scraper_base.create_merged_cbz(self._downloaded_chapter_dirs, manga_title)
+                if settings.convert_to_epub:
+                    scraper_base.create_merged_epub(self._downloaded_chapter_dirs, manga_title)
+                
+                # Delete chapter images after merge if enabled
+                if settings.delete_images_after_conversion:
+                    for chapter_dir, _ in self._downloaded_chapter_dirs:
+                        if os.path.exists(chapter_dir):
+                            scraper_base.delete_chapter_images(chapter_dir)
             
             self.overall_progress.emit(total_chapters, total_chapters)
             self.finished_signal.emit(successful > 0)

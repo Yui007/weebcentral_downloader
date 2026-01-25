@@ -282,7 +282,8 @@ class MainWindow(QMainWindow):
         self._download_worker = DownloadWorker()
         self._download_worker.set_download_params(
             manga_url=self._current_manga_url,
-            chapters=chapter_dicts
+            chapters=chapter_dicts,
+            manga_title=self._manga_info.get("title", "Unknown")
         )
         
         # Connect with QueuedConnection for cross-thread safety (ThreadPoolExecutor -> main thread)
@@ -316,6 +317,9 @@ class MainWindow(QMainWindow):
     
     def _on_download_finished(self, success: bool):
         """Handle all downloads finished."""
+        # Wait for thread to fully finish before clearing reference
+        if self._download_worker:
+            self._download_worker.wait()
         self._download_worker = None
         
         if success:

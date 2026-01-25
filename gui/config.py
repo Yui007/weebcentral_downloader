@@ -29,6 +29,8 @@ class Settings:
     # Conversion options
     convert_to_pdf: bool = False
     convert_to_cbz: bool = False
+    convert_to_epub: bool = False
+    merge_chapters: bool = False
     delete_images_after_conversion: bool = False
     
     # UI settings

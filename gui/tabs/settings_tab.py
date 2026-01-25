@@ -248,6 +248,37 @@ class SettingsTab(QWidget):
         """)
         conversion_section.add_widget(self._cbz_check)
         
+        # EPUB conversion
+        self._epub_check = QCheckBox("Convert to EPUB (Electronic Book)")
+        self._epub_check.setStyleSheet(f"""
+            QCheckBox {{
+                color: {Colors.TEXT_PRIMARY};
+                font-size: {Fonts.SIZE_BODY}px;
+                spacing: {Spacing.SM}px;
+            }}
+        """)
+        conversion_section.add_widget(self._epub_check)
+        
+        # Merge chapters option
+        self._merge_check = QCheckBox("Merge all chapters into single file")
+        self._merge_check.setStyleSheet(f"""
+            QCheckBox {{
+                color: {Colors.TEXT_PRIMARY};
+                font-size: {Fonts.SIZE_BODY}px;
+                spacing: {Spacing.SM}px;
+            }}
+        """)
+        merge_hint = QLabel("Creates one PDF/CBZ/EPUB with all chapters instead of separate files")
+        merge_hint.setStyleSheet(f"""
+            QLabel {{
+                color: {Colors.TEXT_MUTED};
+                font-size: {Fonts.SIZE_SMALL}px;
+                margin-left: 24px;
+            }}
+        """)
+        conversion_section.add_widget(self._merge_check)
+        conversion_section.add_widget(merge_hint)
+        
         # Delete images after conversion
         self._delete_check = QCheckBox("Delete images after conversion")
         self._delete_check.setStyleSheet(f"""
@@ -257,7 +288,7 @@ class SettingsTab(QWidget):
                 spacing: {Spacing.SM}px;
             }}
         """)
-        delete_hint = QLabel("Only takes effect if PDF or CBZ conversion is enabled")
+        delete_hint = QLabel("Only takes effect if PDF, CBZ, or EPUB conversion is enabled")
         delete_hint.setStyleSheet(f"""
             QLabel {{
                 color: {Colors.TEXT_MUTED};
@@ -305,6 +336,8 @@ class SettingsTab(QWidget):
         self._delay_label.setText(f"{settings.delay:.1f}s")
         self._pdf_check.setChecked(settings.convert_to_pdf)
         self._cbz_check.setChecked(settings.convert_to_cbz)
+        self._epub_check.setChecked(settings.convert_to_epub)
+        self._merge_check.setChecked(settings.merge_chapters)
         self._delete_check.setChecked(settings.delete_images_after_conversion)
     
     def _save_settings(self):
@@ -317,6 +350,8 @@ class SettingsTab(QWidget):
         settings.delay = self._delay_slider.value() / 10.0
         settings.convert_to_pdf = self._pdf_check.isChecked()
         settings.convert_to_cbz = self._cbz_check.isChecked()
+        settings.convert_to_epub = self._epub_check.isChecked()
+        settings.merge_chapters = self._merge_check.isChecked()
         settings.delete_images_after_conversion = self._delete_check.isChecked()
         
         save_settings()
