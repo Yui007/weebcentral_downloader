@@ -7,6 +7,7 @@ from typing import Optional, Dict, List, Any
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
+from flaresolverr_client import FlareSolverrSession
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
@@ -36,6 +37,13 @@ class ScraperWorker(QThread):
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
             'Accept-Language': 'en-US,en;q=0.9',
         }
+        
+        # HTML Session (FlareSolverr)
+        self.session = FlareSolverrSession()
+        
+        # Image Session (Direct)
+        self.image_session = requests.Session()
+        self.image_session.headers.update(self.headers)
     
     def set_url(self, url: str):
         """Set the manga URL to fetch."""
@@ -50,7 +58,7 @@ class ScraperWorker(QThread):
             self.progress.emit("Fetching manga page...")
             
             # Fetch main manga page
-            response = requests.get(self._manga_url, headers=self.headers, timeout=30)
+            response = self.session.get(self._manga_url)
             if response.status_code != 200:
                 self.error.emit(f"Failed to fetch manga page (HTTP {response.status_code})")
                 self.finished_signal.emit(False)
@@ -136,7 +144,7 @@ class ScraperWorker(QThread):
     def _fetch_cover(self, url: str) -> Optional[bytes]:
         """Fetch cover image data."""
         try:
-            response = requests.get(url, headers=self.headers, timeout=15)
+            response = self.image_session.get(url, headers=self.headers, timeout=15)
             if response.status_code == 200:
                 return response.content
         except Exception:
@@ -156,7 +164,7 @@ class ScraperWorker(QThread):
             chapter_list_path = f"{'/'.join(path_parts[:3])}/full-chapter-list"
             chapters_url = f"https://weebcentral.com{chapter_list_path}"
             
-            response = requests.get(chapters_url, headers=self.headers, timeout=30)
+            response = self.session.get(chapters_url)
             if response.status_code != 200:
                 return chapters
             

@@ -1,6 +1,5 @@
 requests
 beautifulsoup4
-selenium
 tqdm
 PyQt6
 fpdf2

@@ -5,14 +5,11 @@ import json
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
 import logging
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-import time
-import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
-from selenium.webdriver.support.ui import WebDriverWait
 from fpdf import FPDF
+from flaresolverr_client import FlareSolverrSession
+import time
 from PIL import Image
 import zipfile
 import shutil
@@ -58,9 +55,12 @@ class WeebCentralScraper:
             'Cache-Control': 'no-cache',
         }
         
-        # Create a session for persistent connections
-        self.session = requests.Session()
-        self.session.headers.update(self.headers)
+        # Create a persistent FlareSolverr session for HTML pages
+        self.session = FlareSolverrSession()
+        
+        # Create a standard session for direct image downloads (CDN is not protected)
+        self.image_session = requests.Session()
+        self.image_session.headers.update(self.headers)
         self.chapters = []  # Store chapters list for reference
         self.progress_callback = None
         self.stop_flag = lambda: False
@@ -99,7 +99,7 @@ class WeebCentralScraper:
                     return
 
                 logger.info(f"Downloading cover image from: {cover_img_url}")
-                img_response = self.session.get(cover_img_url, headers=self.headers, timeout=10)
+                img_response = self.image_session.get(cover_img_url, headers=self.headers, timeout=10)
                 img_response.raise_for_status()
 
                 with open(filepath, 'wb') as f:
@@ -122,7 +122,7 @@ class WeebCentralScraper:
         chapter_list_url = self.get_chapter_list_url()
         logger.info(f"Fetching chapter list from: {chapter_list_url}")
         
-        response = requests.get(chapter_list_url, headers=self.headers)
+        response = self.session.get(chapter_list_url)
         if response.status_code != 200:
             logger.error("Failed to fetch chapter list")
             return []
@@ -153,49 +153,35 @@ class WeebCentralScraper:
         return chapters
 
     def get_chapter_images(self, chapter_url):
-        """Get list of image URLs for a chapter"""
-        logger.info("Loading page with Selenium...")
-        
-        options = webdriver.ChromeOptions()
-        options.add_argument('--headless')
-        options.add_argument('--disable-gpu')
-        options.add_argument('--no-sandbox')
-        options.add_argument('--disable-dev-shm-usage')
-        options.add_argument(f'user-agent={self.headers["User-Agent"]}')
-        # Add preference to disable brotli compression
-        options.add_experimental_option('prefs', {
-            'profile.default_content_settings.cookies': 2,
-            'profile.managed_default_content_settings.images': 1,
-            'profile.default_content_setting_values.notifications': 2
-        })
-        # Add header to disable brotli
-        options.add_argument('--accept-encoding=gzip, deflate')
-        
-        driver = webdriver.Chrome(options=options)
+        """Get list of image URLs for a chapter using FlareSolverr"""
+        # Append /images endpoint with long strip reading style
+        images_url = f"{chapter_url}/images?reading_style=long_strip"
+        logger.info(f"Fetching images from: {images_url}")
         
         try:
-            driver.get(chapter_url)
-            time.sleep(3)  # Wait for JavaScript to load
+            # Use FlareSolverr session to bypass Cloudflare on the HTML page
+            response = self.session.get(images_url)
             
-            # Wait for images to load
-            WebDriverWait(driver, 10).until(
-                lambda x: x.find_elements(By.CSS_SELECTOR, "img[src*='/manga/']")
-            )
+            if response.status_code != 200:
+                logger.error(f"Failed to fetch chapter images page: {response.status_code}")
+                return []
             
-            # Get all image elements
-            image_elements = driver.find_elements(By.CSS_SELECTOR, "img[src*='/manga/']")
+            # Parse HTML to find images
+            soup = BeautifulSoup(response.content, 'html.parser')
             image_urls = []
             
-            for img in image_elements:
-                url = img.get_attribute('src')
-                if url and not url.startswith('data:'):
-                    image_urls.append(url)
+            for img in soup.find_all("img"):
+                src = img.get("src")
+                if isinstance(src, list): src = src[0]
+                if src and "broken_image" not in src and src.startswith("http"):
+                    image_urls.append(src)
             
             logger.info(f"Found {len(image_urls)} images")
             return image_urls
             
-        finally:
-            driver.quit()
+        except Exception as e:
+            logger.error(f"Failed to get chapter images: {e}")
+            return []
 
     def download_image(self, img_url, filepath, chapter_url):
         """Download a single image"""
@@ -215,7 +201,7 @@ class WeebCentralScraper:
             max_retries = 3
             for attempt in range(max_retries):
                 try:
-                    img_response = self.session.get(
+                    img_response = self.image_session.get(
                         img_url,
                         headers=headers,
                         timeout=10,
@@ -625,7 +611,7 @@ img{{max-width:100%;max-height:100vh;object-fit:contain;}}</style>
         logger.info(f"Starting to scrape manga from: {self.manga_url}")
         
         # Get manga page
-        response = requests.get(self.manga_url, headers=self.headers)
+        response = self.session.get(self.manga_url)
         if response.status_code != 200:
             logger.error("Failed to fetch manga page")
             return False

@@ -15,6 +15,7 @@ from gui.components.animated_button import NavButton
 from gui.tabs import UrlInputTab, MangaInfoTab, DownloadsTab, SettingsTab
 from gui.workers import ScraperWorker, DownloadWorker
 from gui.components.download_card import DownloadStatus
+from flaresolverr_client import is_flaresolverr_running
 
 
 class MainWindow(QMainWindow):
@@ -34,6 +35,16 @@ class MainWindow(QMainWindow):
         self._setup_window()
         self._setup_ui()
         self._connect_signals()
+        
+        # Check for FlareSolverr on startup
+        if not is_flaresolverr_running():
+            QMessageBox.warning(
+                self,
+                "FlareSolverr Not Detected",
+                "FlareSolverr is required to bypass Cloudflare protection.\n\n"
+                "Please start FlareSolverr on port 8191 and restart the application.\n"
+                "See README.md for setup instructions."
+            )
     
     def _setup_window(self):
         """Configure window properties."""
