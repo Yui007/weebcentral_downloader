@@ -87,7 +87,7 @@ class DownloadWorker(QThread):
             # Create a scraper instance for this chapter
             scraper = WeebCentralScraper(
                 manga_url=self._manga_url,
-                output_dir=self._output_dir or settings.output_dir,
+                output_dir=os.path.join(self._output_dir or settings.output_dir, re.sub(r'[\\/*?:"<>|]', '_', self._manga_title or "Unknown Manga")),
                 delay=settings.delay,
                 max_threads=settings.max_image_threads,
                 convert_to_pdf=False,
@@ -184,7 +184,7 @@ class DownloadWorker(QThread):
         # Create a base scraper for merge functions
         scraper_base = WeebCentralScraper(
             manga_url=self._manga_url,
-            output_dir=self._output_dir or settings.output_dir,
+            output_dir=os.path.join(self._output_dir or settings.output_dir, re.sub(r'[\\/*?:"<>|]', '_', self._manga_title or "Unknown Manga")),
             delay=settings.delay,
             max_threads=settings.max_image_threads,
             convert_to_pdf=settings.convert_to_pdf,
