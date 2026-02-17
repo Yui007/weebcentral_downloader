@@ -289,41 +289,52 @@ class WeebCentralScraper:
         return downloaded, chapter_dir
 
     def create_pdf_from_chapter(self, chapter_dir, chapter_name):
-        """Create a PDF from all images in a chapter directory"""
+        """Create a PDF from all images in a chapter directory.
+        Each page is sized exactly to its image — no white borders.
+        """
         logger.info(f"Creating PDF for chapter: {chapter_name}")
-        
+
         image_files = sorted([
             os.path.join(chapter_dir, f)
             for f in os.listdir(chapter_dir)
             if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif'))
         ])
-        
+
         if not image_files:
             logger.warning(f"No images found in {chapter_dir} to create PDF.")
             return
 
         pdf = FPDF()
+        pdf.set_auto_page_break(auto=False)  # Prevent FPDF from adding extra space
+
         for image_file in image_files:
             try:
                 with Image.open(image_file) as img:
-                    width, height = img.size
-                    # A4 size: 210x297 mm
-                    # Keep aspect ratio
-                    if width > height:
-                        w, h = 297, 210
+                    # Convert to RGB if needed (handles PNG transparency, RGBA, etc.)
+                    if img.mode not in ("RGB", "L"):
+                        img = img.convert("RGB")
+                        rgb_path = image_file + "_rgb.jpg"
+                        img.save(rgb_path, "JPEG", quality=95)
+                        source_path = rgb_path
                     else:
-                        w, h = 210, 297
-                    
-                    # Scale image to fit page
-                    w_new = w
-                    h_new = h
-                    if width / height > w / h:
-                        h_new = w * height / width
-                    else:
-                        w_new = h * width / height
-                        
-                    pdf.add_page()
-                    pdf.image(image_file, x=(w - w_new) / 2, y=(h - h_new) / 2, w=w_new, h=h_new)
+                        source_path = image_file
+
+                    width_px, height_px = img.size
+
+                # Convert pixels → mm (96 DPI standard for web images)
+                DPI = 96
+                width_mm  = (width_px  / DPI) * 25.4
+                height_mm = (height_px / DPI) * 25.4
+
+                # Set page size exactly to image dimensions — zero margins
+                pdf.add_page(format=(width_mm, height_mm))
+                pdf.set_margins(0, 0, 0)
+                pdf.image(source_path, x=0, y=0, w=width_mm, h=height_mm)
+
+                # Clean up temp RGB file if created
+                if source_path != image_file and os.path.exists(source_path):
+                    os.remove(source_path)
+
             except Exception as e:
                 logger.error(f"Failed to process image {image_file}: {e}")
 
@@ -435,41 +446,53 @@ img{{max-width:100%;max-height:100vh;object-fit:contain;}}</style>
             logger.error(f"Failed to create EPUB for {chapter_name}: {e}")
 
     def create_merged_pdf(self, chapter_dirs, manga_title):
-        """Create a single merged PDF from all chapter directories"""
+        """Create a single merged PDF from all chapter directories.
+        Each page is sized exactly to its image — no white borders.
+        """
         logger.info(f"Creating merged PDF for: {manga_title}")
-        
+
         pdf = FPDF()
-        
+        pdf.set_auto_page_break(auto=False)
+
         for chapter_dir, chapter_name in sorted(chapter_dirs, key=lambda x: self.extract_chapter_number(x[1])):
             if not os.path.exists(chapter_dir):
                 continue
-                
+
             image_files = sorted([
                 os.path.join(chapter_dir, f)
                 for f in os.listdir(chapter_dir)
                 if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif'))
             ])
-            
+
             for image_file in image_files:
                 try:
                     with Image.open(image_file) as img:
-                        width, height = img.size
-                        if width > height:
-                            w, h = 297, 210
+                        # Handle transparency (PNG/RGBA) — FPDF can't handle it
+                        if img.mode not in ("RGB", "L"):
+                            img = img.convert("RGB")
+                            source_path = image_file + "_rgb.jpg"
+                            img.save(source_path, "JPEG", quality=95)
                         else:
-                            w, h = 210, 297
-                        
-                        w_new, h_new = w, h
-                        if width / height > w / h:
-                            h_new = w * height / width
-                        else:
-                            w_new = h * width / height
-                            
-                        pdf.add_page()
-                        pdf.image(image_file, x=(w - w_new) / 2, y=(h - h_new) / 2, w=w_new, h=h_new)
+                            source_path = image_file
+
+                        width_px, height_px = img.size
+
+                    # Pixels → mm at 96 DPI
+                    DPI = 96
+                    width_mm  = (width_px / DPI) * 25.4
+                    height_mm = (height_px / DPI) * 25.4
+
+                    pdf.add_page(format=(width_mm, height_mm))
+                    pdf.set_margins(0, 0, 0)
+                    pdf.image(source_path, x=0, y=0, w=width_mm, h=height_mm)
+
+                    # Clean up temp file
+                    if source_path != image_file and os.path.exists(source_path):
+                        os.remove(source_path)
+
                 except Exception as e:
                     logger.error(f"Failed to process image {image_file}: {e}")
-        
+
         pdf_path = os.path.join(self.output_dir, f"{manga_title}.pdf")
         pdf.output(pdf_path)
         logger.info(f"Successfully created merged PDF: {pdf_path}")
