@@ -74,28 +74,38 @@
 
 ## 🚀 Quick Start
 
-### Installation
+## Requirements
 
-```bash
-# Clone the repository
-git clone https://github.com/Yui007/weebcentral_downloader.git
-cd weebcentral_downloader
+- Python 3.8+
+- [FlareSolverr](https://github.com/FlareSolverr/FlareSolverr) (Required to bypass Cloudflare)
 
-# Install dependencies
-pip install -r requirements.txt
-```
+## Setup
 
-### Launch the GUI
+1.  **Clone the Repository**
+    ```bash
+    git clone https://github.com/Yui007/weebcentral_downloader.git
+    cd weebcentral_downloader
+    ```
 
-```bash
-python run_gui.py
-```
+2.  **Install FlareSolverr**
+    *   Download the latest release from [FlareSolverr Releases](https://github.com/FlareSolverr/FlareSolverr/releases).
+    *   Extract and run the executable (`flaresolverr.exe` on Windows).
+    *   Ensure it is running on the default port `8191`.
 
-### Or use Command Line
+3.  **Install Python Dependencies**
+    ```bash
+    pip install -r requirements.txt
+    ```
 
-```bash
-python weebcentral_scraper.py
-```
+4.  **Run the Downloader**
+    *   **GUI Mode:**
+        ```bash
+        python run_gui.py
+        ```
+    *   **CLI Mode:**
+        ```bash
+        python weebcentral_scraper.py
+        ```
 
 ---
 
@@ -121,7 +131,7 @@ python weebcentral_scraper.py
 
 ---
 
-## ☁️ Google Colab
+## ☁️ Google Colab (Not Working)
 
 Run directly in your browser - no installation needed!
 
@@ -172,7 +182,6 @@ weebcentral_downloader/
 Python >= 3.8
 requests >= 2.31.0
 beautifulsoup4 >= 4.12.0
-selenium >= 4.15.0
 tqdm >= 4.66.1
 PyQt6 >= 6.5.0
 fpdf2 >= 2.7.4
