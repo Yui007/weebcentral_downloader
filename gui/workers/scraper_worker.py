@@ -3,13 +3,15 @@ Scraper Worker.
 Background thread for fetching manga information.
 """
 
+import logging
 from typing import Optional, Dict, List, Any
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
-from flaresolverr_client import FlareSolverrSession
 
 from PyQt6.QtCore import QThread, pyqtSignal
+
+logger = logging.getLogger(__name__)
 
 
 class ScraperWorker(QThread):
@@ -38,13 +40,57 @@ class ScraperWorker(QThread):
             'Accept-Language': 'en-US,en;q=0.9',
         }
         
-        # HTML Session (FlareSolverr)
-        self.session = FlareSolverrSession()
+        # FlareSolverr session — only created if Cloudflare is detected
+        self._flare_session = None
         
-        # Image Session (Direct)
+        # Direct session for standard requests
         self.image_session = requests.Session()
         self.image_session.headers.update(self.headers)
     
+    def _is_cloudflare_challenge(self, response) -> bool:
+        """Detect Cloudflare challenge from response status and body."""
+        if response.status_code in [403, 503]:
+            return True
+        if response.text:
+            text = response.text
+            if "<title>Just a moment...</title>" in text:
+                return True
+            if "Enable JavaScript and cookies to continue" in text:
+                return True
+            if "cloudflare" in text.lower() and "challenge" in text.lower():
+                return True
+        return False
+
+    def _get_flare_session(self):
+        """Lazily create and return a FlareSolverr session, or None if unavailable."""
+        if self._flare_session is not None:
+            return self._flare_session
+        try:
+            from flaresolverr_client import FlareSolverrSession
+            self._flare_session = FlareSolverrSession()
+            return self._flare_session
+        except Exception as e:
+            logger.warning(f"FlareSolverr not available: {e}")
+            return None
+
+    def _fetch_html(self, url: str):
+        """Fetch HTML content via direct request. Falls back to FlareSolverr only on Cloudflare challenge."""
+        response = self.image_session.get(url, timeout=15)
+        
+        if self._is_cloudflare_challenge(response):
+            logger.info("Cloudflare challenge detected, attempting FlareSolverr fallback...")
+            session = self._get_flare_session()
+            if session:
+                try:
+                    return session.get(url)
+                except Exception as e:
+                    logger.warning(f"FlareSolverr fallback failed: {e}")
+            # If FlareSolverr isn't available or failed, raise with the original status
+            response.raise_for_status()
+        
+        response.raise_for_status()
+        return response
+
     def set_url(self, url: str):
         """Set the manga URL to fetch."""
         self._manga_url = url
@@ -58,7 +104,7 @@ class ScraperWorker(QThread):
             self.progress.emit("Fetching manga page...")
             
             # Fetch main manga page
-            response = self.session.get(self._manga_url)
+            response = self._fetch_html(self._manga_url)
             if response.status_code != 200:
                 self.error.emit(f"Failed to fetch manga page (HTTP {response.status_code})")
                 self.finished_signal.emit(False)
@@ -117,6 +163,8 @@ class ScraperWorker(QThread):
         cover_elem = soup.select_one("img[src*='cover']") or soup.select_one("section img")
         if cover_elem:
             src = cover_elem.get("src", "")
+            if isinstance(src, list):
+                src = src[0]
             if src:
                 if not src.startswith("http"):
                     src = urljoin("https://weebcentral.com", src)
@@ -164,7 +212,7 @@ class ScraperWorker(QThread):
             chapter_list_path = f"{'/'.join(path_parts[:3])}/full-chapter-list"
             chapters_url = f"https://weebcentral.com{chapter_list_path}"
             
-            response = self.session.get(chapters_url)
+            response = self._fetch_html(chapters_url)
             if response.status_code != 200:
                 return chapters
             

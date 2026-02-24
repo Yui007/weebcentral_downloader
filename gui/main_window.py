@@ -36,15 +36,7 @@ class MainWindow(QMainWindow):
         self._setup_ui()
         self._connect_signals()
         
-        # Check for FlareSolverr on startup
-        if not is_flaresolverr_running():
-            QMessageBox.warning(
-                self,
-                "FlareSolverr Not Detected",
-                "FlareSolverr is required to bypass Cloudflare protection.\n\n"
-                "Please start FlareSolverr on port 8191 and restart the application.\n"
-                "See README.md for setup instructions."
-            )
+
     
     def _setup_window(self):
         """Configure window properties."""

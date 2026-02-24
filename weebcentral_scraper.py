@@ -55,10 +55,10 @@ class WeebCentralScraper:
             'Cache-Control': 'no-cache',
         }
         
-        # Create a persistent FlareSolverr session for HTML pages
-        self.session = FlareSolverrSession()
+        # We will initialize FlareSolverrSession only if needed (as a fallback)
+        self.session = None
         
-        # Create a standard session for direct image downloads (CDN is not protected)
+        # Create a standard session for direct image downloads and initial HTML requests
         self.image_session = requests.Session()
         self.image_session.headers.update(self.headers)
         self.chapters = []  # Store chapters list for reference
@@ -70,6 +70,38 @@ class WeebCentralScraper:
 
     def set_stop_flag(self, stop_flag):
         self.stop_flag = stop_flag
+
+    def _fetch_html(self, url):
+        """Fetch HTML content, trying standard session first, then falling back to FlareSolverr."""
+        response = self.image_session.get(url, timeout=15)
+        
+        # Check for Cloudflare challenge indicators
+        is_cf_challenge = response.status_code in [403, 503]
+        if not is_cf_challenge and response.text:
+            text = response.text
+            if "<title>Just a moment...</title>" in text or \
+               "Enable JavaScript and cookies to continue" in text or \
+               ("cloudflare" in text.lower() and "challenge" in text.lower()):
+                is_cf_challenge = True
+        
+        if is_cf_challenge:
+            logger.warning(f"Cloudflare protection detected (Status {response.status_code}). Falling back to FlareSolverr.")
+            if self.session is None:
+                try:
+                    self.session = FlareSolverrSession()
+                except Exception as e:
+                    logger.error(f"FlareSolverr not available: {e}")
+                    response.raise_for_status()
+                    return response
+            try:
+                return self.session.get(url)
+            except Exception as fs_e:
+                logger.error(f"FlareSolverr fallback also failed: {fs_e}")
+                response.raise_for_status()
+                return response
+        
+        response.raise_for_status()
+        return response
 
     def get_manga_title(self, soup):
         """Extract the manga title from the page"""
@@ -122,9 +154,14 @@ class WeebCentralScraper:
         chapter_list_url = self.get_chapter_list_url()
         logger.info(f"Fetching chapter list from: {chapter_list_url}")
         
-        response = self.session.get(chapter_list_url)
+        try:
+            response = self._fetch_html(chapter_list_url)
+        except Exception as e:
+            logger.error(f"Failed to fetch chapter list: {e}")
+            return []
+            
         if response.status_code != 200:
-            logger.error("Failed to fetch chapter list")
+            logger.error(f"Failed to fetch chapter list: Status {response.status_code}")
             return []
             
         soup = BeautifulSoup(response.content, 'html.parser')
@@ -159,8 +196,8 @@ class WeebCentralScraper:
         logger.info(f"Fetching images from: {images_url}")
         
         try:
-            # Use FlareSolverr session to bypass Cloudflare on the HTML page
-            response = self.session.get(images_url)
+            # Try to fetch images page (will use FlareSolverr fallback if needed)
+            response = self._fetch_html(images_url)
             
             if response.status_code != 200:
                 logger.error(f"Failed to fetch chapter images page: {response.status_code}")
@@ -634,9 +671,14 @@ img{{max-width:100%;max-height:100vh;object-fit:contain;}}</style>
         logger.info(f"Starting to scrape manga from: {self.manga_url}")
         
         # Get manga page
-        response = self.session.get(self.manga_url)
+        try:
+            response = self._fetch_html(self.manga_url)
+        except Exception as e:
+            logger.error(f"Failed to fetch manga page: {e}")
+            return False
+            
         if response.status_code != 200:
-            logger.error("Failed to fetch manga page")
+            logger.error(f"Failed to fetch manga page: Status {response.status_code}")
             return False
             
         soup = BeautifulSoup(response.content, 'html.parser')

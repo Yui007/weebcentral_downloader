@@ -15,7 +15,6 @@ class FlareSolverrSession:
     def __init__(self, timeout=60000):
         self.timeout = timeout
         self._session_id = None
-        self._ensure_session()
 
     def _ensure_session(self):
         """Create a session if one doesn't exist."""

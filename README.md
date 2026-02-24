@@ -77,7 +77,7 @@
 ## Requirements
 
 - Python 3.8+
-- [FlareSolverr](https://github.com/FlareSolverr/FlareSolverr) (Required to bypass Cloudflare)
+- [FlareSolverr](https://github.com/FlareSolverr/FlareSolverr) (**Optional** — only needed if the site enables Cloudflare protection)
 
 ## Setup
 
@@ -87,7 +87,10 @@
     cd weebcentral_downloader
     ```
 
-2.  **Install FlareSolverr**
+2.  **Install FlareSolverr (Optional)**
+    
+    > **Note:** FlareSolverr is **not required** for normal use. The downloader connects directly to the site. FlareSolverr is only used as an automatic fallback if Cloudflare protection is detected (e.g., 403/503 challenge pages). You can skip this step entirely unless you encounter Cloudflare blocks.
+    
     *   Download the latest release from [FlareSolverr Releases](https://github.com/FlareSolverr/FlareSolverr/releases).
     *   Extract and run the executable (`flaresolverr.exe` on Windows).
     *   Ensure it is running on the default port `8191`.
