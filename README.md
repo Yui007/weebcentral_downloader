@@ -7,7 +7,7 @@
 [![Python](https://img.shields.io/badge/Python-3.8+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![PyQt6](https://img.shields.io/badge/PyQt6-GUI-41CD52?style=for-the-badge&logo=qt&logoColor=white)](https://pypi.org/project/PyQt6/)
 [![License](https://img.shields.io/badge/License-MIT-00D4AA?style=for-the-badge)](LICENSE)
-[![Open In Colab](https://img.shields.io/badge/Google-Colab-F9AB00?style=for-the-badge&logo=googlecolab&logoColor=white)](https://colab.research.google.com/github/Yui007/weebcentral_downloader/blob/main/colab_run.ipynb)
+[![Open In Colab](https://img.shields.io/badge/Google-Colab-F9AB00?style=for-the-badge&logo=googlecolab&logoColor=white)](https://colab.research.google.com/github/Yui007/weebcentral_downloader/blob/main/colab/WeebCentral_Downloader.ipynb)
 
 <br>
 
@@ -72,6 +72,21 @@
 
 ---
 
+## ☁️ Google Colab
+
+Run directly in your browser - no installation needed!
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Yui007/weebcentral_downloader/blob/main/colab/WeebCentral_Downloader.ipynb)
+
+1. Click the badge above to open the notebook
+2. Run **Cell 1** to install dependencies and clone the repository
+3. Run **Cell 2** — paste your manga URL, select chapters & format
+4. Optionally run **Cell 3** to zip and download to your PC
+
+**Output formats:** `pdf`, `cbz` (with ComicInfo.xml for Kavita/Komga), `images`, or `all`
+
+---
+
 ## 🚀 Quick Start
 
 ## Requirements
@@ -131,19 +146,6 @@
 | Convert to PDF | ✓/✗ | Auto-convert chapters to PDF |
 | Convert to CBZ | ✓/✗ | Auto-convert chapters to CBZ |
 | Delete After | ✓/✗ | Remove images after conversion |
-
----
-
-## ☁️ Google Colab (Not Working)
-
-Run directly in your browser - no installation needed!
-
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Yui007/weebcentral_downloader/blob/main/colab_run.ipynb)
-
-1. Click the badge above
-2. Run cells in order
-3. Follow prompts to download
-4. Use compression tools for easier export
 
 ---
 
