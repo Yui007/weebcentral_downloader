@@ -8,7 +8,7 @@ import os
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-    QFrame, QScrollArea, QPushButton, QProgressBar
+    QFrame, QScrollArea, QPushButton, QProgressBar, QComboBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QCursor, QDesktopServices
@@ -32,6 +32,8 @@ class DownloadsTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._cards: Dict[str, DownloadCard] = {}
+        self._sort_by = "name"  # 'name' or 'progress'
+        self._sort_order = "asc"  # 'asc' or 'desc'
         self._setup_ui()
     
     def _setup_ui(self):
@@ -123,6 +125,53 @@ class DownloadsTab(QWidget):
         btn_row.addWidget(self._open_folder_btn)
         
         btn_row.addStretch()
+        
+        # Sort controls
+        sort_label = QLabel("Sort by:")
+        sort_label.setStyleSheet(f"""
+            QLabel {{
+                color: {Colors.TEXT_SECONDARY};
+                font-size: {Fonts.SIZE_SMALL}px;
+            }}
+        """)
+        btn_row.addWidget(sort_label)
+        
+        self._sort_combo = QComboBox()
+        self._sort_combo.addItems(["Name ↑", "Name ↓", "Progress ↑", "Progress ↓"])
+        self._sort_combo.setStyleSheet(f"""
+            QComboBox {{
+                background-color: {Colors.BG_LIGHT};
+                color: {Colors.TEXT_PRIMARY};
+                border: 1px solid {Colors.BORDER_DEFAULT};
+                border-radius: {Spacing.RADIUS_SM}px;
+                padding: {Spacing.SM}px {Spacing.MD}px;
+                font-size: {Fonts.SIZE_SMALL}px;
+                min-width: 120px;
+            }}
+            QComboBox:hover {{
+                border-color: {Colors.NEON_CYAN};
+            }}
+            QComboBox::drop-down {{
+                border: none;
+            }}
+            QComboBox::down-arrow {{
+                image: none;
+                border-left: 4px solid transparent;
+                border-right: 4px solid transparent;
+                border-top: 6px solid {Colors.TEXT_SECONDARY};
+                margin-right: 8px;
+            }}
+            QComboBox QAbstractItemView {{
+                background-color: {Colors.BG_MEDIUM};
+                color: {Colors.TEXT_PRIMARY};
+                selection-background-color: {Colors.NEON_CYAN};
+                selection-color: {Colors.BG_DARK};
+                border: 1px solid {Colors.BORDER_DEFAULT};
+            }}
+        """)
+        self._sort_combo.currentIndexChanged.connect(self._on_sort_changed)
+        btn_row.addWidget(self._sort_combo)
+        
         header_layout.addLayout(btn_row)
         
         layout.addWidget(header)
@@ -169,6 +218,47 @@ class DownloadsTab(QWidget):
         scroll.setWidget(self._scroll_content)
         layout.addWidget(scroll, 1)
     
+    def _on_sort_changed(self, index: int):
+        """Handle sort option change."""
+        sort_options = [
+            ("name", "asc"),   # Name ↑
+            ("name", "desc"),  # Name ↓
+            ("progress", "asc"),  # Progress ↑
+            ("progress", "desc")  # Progress ↓
+        ]
+        
+        if 0 <= index < len(sort_options):
+            self._sort_by, self._sort_order = sort_options[index]
+            self._resort_cards()
+    
+    def _resort_cards(self):
+        """Re-sort and re-arrange download cards."""
+        if not self._cards:
+            return
+        
+        # Get all cards with their data
+        card_data = []
+        for name, card in self._cards.items():
+            card_data.append({
+                'name': name,
+                'card': card,
+                'progress': card._progress
+            })
+        
+        # Sort based on current settings
+        if self._sort_by == "name":
+            card_data.sort(key=lambda x: x['name'].lower(), reverse=(self._sort_order == "desc"))
+        else:  # progress
+            card_data.sort(key=lambda x: x['progress'], reverse=(self._sort_order == "desc"))
+        
+        # Remove all cards from layout
+        for data in card_data:
+            self._scroll_layout.removeWidget(data['card'])
+        
+        # Re-add in sorted order
+        for data in card_data:
+            self._scroll_layout.addWidget(data['card'])
+    
     def add_download(self, chapter_name: str) -> DownloadCard:
         """Add a new download card."""
         if chapter_name in self._cards:
@@ -177,19 +267,16 @@ class DownloadsTab(QWidget):
         # Hide empty state
         self._empty_widget.hide()
         
-        # Create card
+        # Create new card
         card = DownloadCard(chapter_name)
         card.cancelRequested.connect(self._on_cancel_requested)
-        card.retryRequested.connect(self._on_retry_requested)
+        card.retryRequested.connect(lambda name=chapter_name: self.retryChapter.emit(name))
         
-        # Insert at top
-        self._scroll_layout.insertWidget(0, card)
         self._cards[chapter_name] = card
         
-        # Animate in
-        QTimer.singleShot(50, card.fade_in)
+        # Add card in sorted position
+        self._resort_cards()
         
-        self._update_status()
         return card
     
     def update_progress(self, chapter_name: str, progress: int):
@@ -198,6 +285,9 @@ class DownloadsTab(QWidget):
             card = self._cards[chapter_name]
             card.set_progress(progress)
             self._update_overall_progress()
+            # Re-sort if sorting by progress
+            if self._sort_by == "progress":
+                self._resort_cards()
     
     def set_status(self, chapter_name: str, status: DownloadStatus):
         """Set download status for a chapter."""
