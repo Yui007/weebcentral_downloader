@@ -26,6 +26,19 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+def natural_sort_key(text):
+    """Generate a key for natural sorting (handles numbers in strings correctly).
+    
+    Examples:
+        '1.jpg' < '2.jpg' < '10.jpg' < '20.jpg'
+        'page1.png' < 'page2.png' < 'page10.png'
+    """
+    def atoi(text):
+        return int(text) if text.isdigit() else text
+    
+    return [atoi(c) for c in re.split(r'(\d+)', str(text))]
+
 class WeebCentralScraper:
     def __init__(self, manga_url, chapter_range=None, output_dir="downloads", delay=1.0, max_threads=4, convert_to_pdf=False, convert_to_cbz=False, convert_to_epub=False, merge_chapters=False, delete_images_after_conversion=False):
         self.base_url = "https://weebcentral.com"
@@ -459,11 +472,14 @@ class WeebCentralScraper:
         """
         logger.info(f"Creating PDF for chapter: {chapter_name}")
 
-        image_files = sorted([
-            os.path.join(chapter_dir, f)
-            for f in os.listdir(chapter_dir)
-            if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif'))
-        ])
+        image_files = sorted(
+            [
+                os.path.join(chapter_dir, f)
+                for f in os.listdir(chapter_dir)
+                if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif'))
+            ],
+            key=natural_sort_key
+        )
 
         if not image_files:
             logger.warning(f"No images found in {chapter_dir} to create PDF.")
@@ -511,11 +527,14 @@ class WeebCentralScraper:
         """Create a CBZ archive from all images in a chapter directory"""
         logger.info(f"Creating CBZ for chapter: {chapter_name}")
 
-        image_files = sorted([
-            os.path.join(chapter_dir, f)
-            for f in os.listdir(chapter_dir)
-            if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif'))
-        ])
+        image_files = sorted(
+            [
+                os.path.join(chapter_dir, f)
+                for f in os.listdir(chapter_dir)
+                if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif'))
+            ],
+            key=natural_sort_key
+        )
 
         if not image_files:
             logger.warning(f"No images found in {chapter_dir} to create CBZ.")
@@ -541,11 +560,14 @@ class WeebCentralScraper:
         logger.info(f"Creating EPUB for chapter: {chapter_name}")
         
         try:
-            image_files = sorted([
-                os.path.join(chapter_dir, f)
-                for f in os.listdir(chapter_dir)
-                if f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif'))
-            ])
+            image_files = sorted(
+                [
+                    os.path.join(chapter_dir, f)
+                    for f in os.listdir(chapter_dir)
+                    if f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif'))
+                ],
+                key=natural_sort_key
+            )
             
             if not image_files:
                 logger.warning(f"No images found in {chapter_dir} to create EPUB.")
@@ -623,11 +645,14 @@ img{{max-width:100%;max-height:100vh;object-fit:contain;}}</style>
             if not os.path.exists(chapter_dir):
                 continue
 
-            image_files = sorted([
-                os.path.join(chapter_dir, f)
-                for f in os.listdir(chapter_dir)
-                if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif'))
-            ])
+            image_files = sorted(
+                [
+                    os.path.join(chapter_dir, f)
+                    for f in os.listdir(chapter_dir)
+                    if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif'))
+                ],
+                key=natural_sort_key
+            )
 
             for image_file in image_files:
                 try:
@@ -672,11 +697,14 @@ img{{max-width:100%;max-height:100vh;object-fit:contain;}}</style>
                 if not os.path.exists(chapter_dir):
                     continue
                     
-                image_files = sorted([
-                    os.path.join(chapter_dir, f)
-                    for f in os.listdir(chapter_dir)
-                    if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif'))
-                ])
+                image_files = sorted(
+                    [
+                        os.path.join(chapter_dir, f)
+                        for f in os.listdir(chapter_dir)
+                        if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif'))
+                    ],
+                    key=natural_sort_key
+                )
                 
                 # Create chapter folder inside CBZ
                 chapter_folder = re.sub(r'[\\/*?:"<>|]', '_', chapter_name)
@@ -702,11 +730,14 @@ img{{max-width:100%;max-height:100vh;object-fit:contain;}}</style>
             if not os.path.exists(chapter_dir):
                 continue
                 
-            image_files = sorted([
-                os.path.join(chapter_dir, f)
-                for f in os.listdir(chapter_dir)
-                if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif'))
-            ])
+            image_files = sorted(
+                [
+                    os.path.join(chapter_dir, f)
+                    for f in os.listdir(chapter_dir)
+                    if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif'))
+                ],
+                key=natural_sort_key
+            )
             
             chapter_pages = []
             for image_file in image_files:

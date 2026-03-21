@@ -424,8 +424,19 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Error", "Manga folder not found!")
             return
         
-        # Get all chapter directories
-        chapter_dirs = [d for d in manga_path_obj.iterdir() if d.is_dir() and not d.name.startswith('.')]
+        # Get all chapter directories with natural sorting
+        import re
+        
+        def natural_sort_key(path):
+            """Natural sort key for paths."""
+            def atoi(text):
+                return int(text) if text.isdigit() else text
+            return [atoi(c) for c in re.split(r'(\d+)', str(path.name))]
+        
+        chapter_dirs = sorted(
+            [d for d in manga_path_obj.iterdir() if d.is_dir() and not d.name.startswith('.')],
+            key=natural_sort_key
+        )
         
         if not chapter_dirs:
             QMessageBox.warning(self, "Error", "No chapters found!")
@@ -463,8 +474,8 @@ class MainWindow(QMainWindow):
         if reply == QMessageBox.StandardButton.No:
             return
         
-        # Add conversion cards to downloads tab
-        for chapter_dir in sorted(chapter_dirs):
+        # Add conversion cards to downloads tab in correct order
+        for chapter_dir in chapter_dirs:
             chapter_name = f"{chapter_dir.name} ({type_name})"
             self._downloads_tab.add_download(chapter_name)
         
