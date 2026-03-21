@@ -39,6 +39,8 @@ class DownloadWorker(QThread):
         super().__init__(parent)
         self._manga_url = ""
         self._manga_title = ""  # Store manga title for merge
+        self._manga_info = {}  # Store full manga info for metadata
+        self._cover_data = None  # Store cover image data
         self._chapters: List[Dict] = []
         self._is_running = False
         self._output_dir = None
@@ -54,13 +56,17 @@ class DownloadWorker(QThread):
         manga_url: str, 
         chapters: List[Dict],
         output_dir: Optional[str] = None,
-        manga_title: str = ""
+        manga_title: str = "",
+        manga_info: Optional[Dict] = None,
+        cover_data: Optional[bytes] = None
     ):
         """Set the download parameters."""
         self._manga_url = manga_url
         self._chapters = chapters
         self._output_dir = output_dir
         self._manga_title = manga_title
+        self._manga_info = manga_info or {}
+        self._cover_data = cover_data
     
     def _emit_progress(self, chapter_name: str, downloaded: int, total: int):
         """Thread-safe progress emission."""
@@ -249,6 +255,10 @@ class DownloadWorker(QThread):
                         if os.path.exists(chapter_dir):
                             scraper_base.delete_chapter_images(chapter_dir)
             
+            # Save metadata after successful download
+            if successful > 0 and self._manga_info:
+                self._save_metadata(scraper_base.output_dir)
+            
             self.overall_progress.emit(total_chapters, total_chapters)
             self.finished_signal.emit(successful > 0)
             
@@ -257,6 +267,49 @@ class DownloadWorker(QThread):
             self.finished_signal.emit(False)
         finally:
             self._is_running = False
+    
+    def _save_metadata(self, output_dir: str):
+        """Save manga metadata to .metadata.json file."""
+        import json
+        
+        try:
+            metadata_path = os.path.join(output_dir, '.metadata.json')
+            
+            # Prepare metadata
+            metadata = {
+                'url': self._manga_url,
+                'title': self._manga_info.get('title', self._manga_title),
+                'description': self._manga_info.get('description', ''),
+                'cover_url': self._manga_info.get('cover_url', ''),
+                'tags': self._manga_info.get('tags', []),
+                'metadata': self._manga_info.get('metadata', {}),
+                'download_date': time.strftime('%Y-%m-%d %H:%M:%S'),
+                'total_chapters': len(self._chapters),
+            }
+            
+            # Save metadata
+            with open(metadata_path, 'w', encoding='utf-8') as f:
+                json.dump(metadata, f, indent=2, ensure_ascii=False)
+            
+            # Save cover image if available
+            if self._cover_data:
+                # Determine extension from cover_url or default to jpg
+                cover_url = self._manga_info.get('cover_url', '')
+                ext = 'jpg'
+                if cover_url:
+                    for possible_ext in ['.png', '.jpg', '.jpeg', '.webp', '.gif']:
+                        if possible_ext in cover_url.lower():
+                            ext = possible_ext.lstrip('.')
+                            break
+                
+                cover_path = os.path.join(output_dir, f'cover.{ext}')
+                with open(cover_path, 'wb') as f:
+                    f.write(self._cover_data)
+                    
+        except Exception as e:
+            # Don't fail the entire download if metadata save fails
+            import logging
+            logging.warning(f"Failed to save metadata: {e}")
     
     def stop(self):
         """Request the worker to stop."""

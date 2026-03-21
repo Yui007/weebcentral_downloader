@@ -32,6 +32,7 @@ class DownloadCard(QFrame):
     """
     
     cancelRequested = pyqtSignal(str)  # Emits chapter name
+    retryRequested = pyqtSignal(str)  # Emits chapter name for retry
     
     def __init__(self, chapter_name: str, parent=None):
         super().__init__(parent)
@@ -87,6 +88,27 @@ class DownloadCard(QFrame):
             }}
         """)
         header.addWidget(self._status_label)
+        
+        # Retry button (hidden by default)
+        self._retry_btn = QPushButton("🔄")
+        self._retry_btn.setFixedSize(28, 28)
+        self._retry_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self._retry_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                border: none;
+                color: {Colors.TEXT_MUTED};
+                font-size: 14px;
+                border-radius: 14px;
+            }}
+            QPushButton:hover {{
+                background-color: {Colors.NEON_CYAN};
+                color: {Colors.TEXT_PRIMARY};
+            }}
+        """)
+        self._retry_btn.clicked.connect(self._on_retry)
+        self._retry_btn.hide()
+        header.addWidget(self._retry_btn)
         
         # Cancel button
         self._cancel_btn = QPushButton("✕")
@@ -193,13 +215,27 @@ class DownloadCard(QFrame):
             }}
         """)
         
-        # Hide cancel button when completed/error
-        if status in (DownloadStatus.COMPLETED, DownloadStatus.ERROR, 
-                      DownloadStatus.CANCELLED):
+        # Show/hide buttons based on status
+        if status == DownloadStatus.ERROR:
             self._cancel_btn.hide()
+            self._retry_btn.show()
+            self._progress_bar.setValue(self._progress)
+        elif status in (DownloadStatus.COMPLETED, DownloadStatus.CANCELLED):
+            self._cancel_btn.hide()
+            self._retry_btn.hide()
             self._progress_bar.setValue(100 if status == DownloadStatus.COMPLETED else self._progress)
+        else:
+            self._cancel_btn.show()
+            self._retry_btn.hide()
     
     def _on_cancel(self):
         """Handle cancel button click."""
         self.cancelRequested.emit(self._chapter_name)
         self.set_status(DownloadStatus.CANCELLED)
+    
+    def _on_retry(self):
+        """Handle retry button click."""
+        self.retryRequested.emit(self._chapter_name)
+        # Reset to queued state
+        self.set_progress(0)
+        self.set_status(DownloadStatus.QUEUED)
