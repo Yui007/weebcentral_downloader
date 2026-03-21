@@ -15,6 +15,8 @@ import zipfile
 import shutil
 import base64
 from ebooklib import epub
+import random
+from threading import Lock
 
 # Set up logging
 logging.basicConfig(
@@ -33,6 +35,7 @@ class WeebCentralScraper:
         self.chapter_range = chapter_range
         self.output_dir = output_dir
         self.delay = float(delay) # Ensure delay is always float
+        self.base_delay = float(delay)  # Store original delay
         self.max_threads = max_threads
         self.convert_to_pdf = convert_to_pdf
         self.convert_to_cbz = convert_to_cbz
@@ -40,6 +43,12 @@ class WeebCentralScraper:
         self.merge_chapters = merge_chapters
         self.delete_images_after_conversion = delete_images_after_conversion
         self.downloaded_chapter_dirs = []  # Track chapter dirs for merging
+        
+        # Rate limiting tracking (thread-safe)
+        self.rate_limit_hits = 0
+        self.last_rate_limit_time = 0
+        self.consecutive_failures = 0
+        self._rate_limit_lock = Lock()
         
         # Enhanced headers
         self.headers = {
@@ -64,44 +73,147 @@ class WeebCentralScraper:
         self.chapters = []  # Store chapters list for reference
         self.progress_callback = None
         self.stop_flag = lambda: False
+        self.failed_chapters = []  # Track failed chapter downloads
 
     def set_progress_callback(self, callback):
         self.progress_callback = callback
 
     def set_stop_flag(self, stop_flag):
         self.stop_flag = stop_flag
+    
+    def get_failed_chapters(self):
+        """Get list of failed chapter downloads"""
+        return self.failed_chapters.copy()
+    
+    def retry_failed_chapter(self, chapter_name):
+        """Retry downloading a specific failed chapter"""
+        # Find the chapter in the failed list
+        for chapter in self.failed_chapters:
+            if chapter['name'] == chapter_name:
+                downloaded, chapter_dir = self.download_chapter(chapter)
+                if downloaded > 0:
+                    # Remove from failed list on success
+                    self.failed_chapters.remove(chapter)
+                    return True, chapter_dir
+                return False, None
+        return False, None
+    
+    def retry_all_failed(self):
+        """Retry all failed chapter downloads"""
+        if not self.failed_chapters:
+            return []
+        
+        failed_copy = self.failed_chapters.copy()
+        results = []
+        
+        for chapter in failed_copy:
+            downloaded, chapter_dir = self.download_chapter(chapter)
+            if downloaded > 0:
+                self.failed_chapters.remove(chapter)
+                results.append({'chapter': chapter['name'], 'success': True, 'dir': chapter_dir})
+            else:
+                results.append({'chapter': chapter['name'], 'success': False, 'dir': None})
+        
+        return results
 
-    def _fetch_html(self, url):
+    def adjust_delay_for_rate_limit(self):
+        """Dynamically adjust delay based on rate limiting encounters (thread-safe)"""
+        with self._rate_limit_lock:
+            current_time = time.time()
+            
+            # If we hit rate limits recently, increase delay
+            if current_time - self.last_rate_limit_time < 60:  # Within last minute
+                self.rate_limit_hits += 1
+                # Exponential backoff for delay adjustment
+                self.delay = min(self.base_delay * (1.5 ** self.rate_limit_hits), 10.0)
+                logger.warning(f"Rate limit detected. Increasing delay to {self.delay:.1f}s")
+            else:
+                # Reset if it's been a while
+                self.rate_limit_hits = 0
+                self.delay = self.base_delay
+            
+            self.last_rate_limit_time = current_time
+
+    def _calculate_backoff_delay(self, attempt, base_delay=2, max_delay=60):
+        """Calculate exponential backoff delay with jitter"""
+        delay = min(base_delay * (2 ** attempt), max_delay)
+        # Add jitter (±20%)
+        jitter = delay * 0.2 * (random.random() - 0.5) * 2
+        return max(0.5, delay + jitter)
+    
+    def _fetch_html(self, url, max_retries=5):
         """Fetch HTML content, trying standard session first, then falling back to FlareSolverr."""
-        response = self.image_session.get(url, timeout=15)
+        last_exception = None
         
-        # Check for Cloudflare challenge indicators
-        is_cf_challenge = response.status_code in [403, 503]
-        if not is_cf_challenge and response.text:
-            text = response.text
-            if "<title>Just a moment...</title>" in text or \
-               "Enable JavaScript and cookies to continue" in text or \
-               ("cloudflare" in text.lower() and "challenge" in text.lower()):
-                is_cf_challenge = True
-        
-        if is_cf_challenge:
-            logger.warning(f"Cloudflare protection detected (Status {response.status_code}). Falling back to FlareSolverr.")
-            if self.session is None:
-                try:
-                    self.session = FlareSolverrSession()
-                except Exception as e:
-                    logger.error(f"FlareSolverr not available: {e}")
-                    response.raise_for_status()
-                    return response
+        for attempt in range(max_retries):
             try:
-                return self.session.get(url)
-            except Exception as fs_e:
-                logger.error(f"FlareSolverr fallback also failed: {fs_e}")
+                response = self.image_session.get(url, timeout=15)
+                
+                # Check for rate limiting specifically
+                if response.status_code == 429:
+                    self.adjust_delay_for_rate_limit()
+                    if attempt < max_retries - 1:
+                        delay = self._calculate_backoff_delay(attempt)
+                        logger.warning(f"Rate limited (429). Retrying in {delay:.1f}s (attempt {attempt + 1}/{max_retries})")
+                        time.sleep(delay)
+                        continue
+                    else:
+                        logger.error("Max retries reached for rate limiting. Trying FlareSolverr as last resort.")
+                
+                # Check for Cloudflare challenge indicators
+                is_cf_challenge = response.status_code in [403, 503]
+                if not is_cf_challenge and response.text:
+                    text = response.text
+                    if "<title>Just a moment...</title>" in text or \
+                       "Enable JavaScript and cookies to continue" in text or \
+                       ("cloudflare" in text.lower() and "challenge" in text.lower()):
+                        is_cf_challenge = True
+                
+                if is_cf_challenge:
+                    logger.warning(f"Cloudflare protection detected (Status {response.status_code}). Falling back to FlareSolverr.")
+                    if self.session is None:
+                        try:
+                            self.session = FlareSolverrSession()
+                        except Exception as e:
+                            logger.error(f"FlareSolverr not available: {e}")
+                            if attempt < max_retries - 1:
+                                delay = self._calculate_backoff_delay(attempt)
+                                logger.warning(f"Retrying in {delay:.1f}s without FlareSolverr...")
+                                time.sleep(delay)
+                                continue
+                            # If this is the last attempt, raise the original response error
+                            response.raise_for_status()
+                            return response
+                    try:
+                        return self.session.get(url)
+                    except Exception as fs_e:
+                        logger.error(f"FlareSolverr fallback also failed: {fs_e}")
+                        if attempt < max_retries - 1:
+                            delay = self._calculate_backoff_delay(attempt)
+                            logger.warning(f"Retrying in {delay:.1f}s...")
+                            time.sleep(delay)
+                            continue
+                        # Last attempt failed, raise the original response error
+                        response.raise_for_status()
+                        return response
+                
+                # Success if we get here
                 response.raise_for_status()
                 return response
+                
+            except requests.exceptions.RequestException as e:
+                last_exception = e
+                if attempt < max_retries - 1:
+                    delay = self._calculate_backoff_delay(attempt)
+                    logger.warning(f"Request failed: {e}. Retrying in {delay:.1f}s (attempt {attempt + 1}/{max_retries})")
+                    time.sleep(delay)
+                else:
+                    logger.error(f"Max retries reached. Failed to fetch {url}")
         
-        response.raise_for_status()
-        return response
+        # If we exhausted all retries, raise the last exception
+        if last_exception:
+            raise last_exception
+        raise requests.exceptions.RequestException(f"Failed to fetch {url} after {max_retries} attempts")
 
     def get_manga_title(self, soup):
         """Extract the manga title from the page"""
@@ -221,7 +333,7 @@ class WeebCentralScraper:
             return []
 
     def download_image(self, img_url, filepath, chapter_url):
-        """Download a single image"""
+        """Download a single image with exponential backoff retry"""
         if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
             logger.info(f"Skipping {os.path.basename(filepath)} - already exists")
             return True
@@ -234,8 +346,8 @@ class WeebCentralScraper:
             headers = self.headers.copy()
             headers['Referer'] = chapter_url
 
-            # Try multiple times with increasing delays
-            max_retries = 3
+            max_retries = 5
+            
             for attempt in range(max_retries):
                 try:
                     img_response = self.image_session.get(
@@ -244,6 +356,16 @@ class WeebCentralScraper:
                         timeout=10,
                         allow_redirects=True
                     )
+                    
+                    # Handle rate limiting specifically
+                    if img_response.status_code == 429:
+                        self.adjust_delay_for_rate_limit()
+                        if attempt < max_retries - 1:
+                            delay = self._calculate_backoff_delay(attempt, base_delay=1, max_delay=30)
+                            logger.warning(f"Rate limited on image. Retrying in {delay:.1f}s (attempt {attempt + 1}/{max_retries})")
+                            time.sleep(delay)
+                            continue
+                    
                     img_response.raise_for_status()
                     
                     # Verify we got an image
@@ -258,18 +380,18 @@ class WeebCentralScraper:
 
                 except requests.exceptions.RequestException as e:
                     if attempt < max_retries - 1:
-                        wait_time = (attempt + 1) * 2  # Progressive delay: 2s, 4s, 6s
-                        logger.warning(f"Attempt {attempt + 1} failed, retrying in {wait_time}s: {str(e)}")
-                        time.sleep(wait_time)
+                        delay = self._calculate_backoff_delay(attempt, base_delay=1, max_delay=30)
+                        logger.warning(f"Attempt {attempt + 1} failed, retrying in {delay:.1f}s: {str(e)}")
+                        time.sleep(delay)
                     else:
                         raise
 
         except Exception as e:
-            logger.error(f"Failed to download {os.path.basename(filepath)}: {str(e)}")
+            logger.error(f"Failed to download {os.path.basename(filepath)} after {max_retries} attempts: {str(e)}")
             return False
 
     def download_chapter(self, chapter):
-        """Download all images for a chapter"""
+        """Download all images for a chapter with improved error recovery"""
         if self.stop_flag():
             return 0, None
         
@@ -278,7 +400,13 @@ class WeebCentralScraper:
         os.makedirs(chapter_dir, exist_ok=True)
         
         logger.info(f"Downloading chapter: {chapter['name']}")
-        image_urls = self.get_chapter_images(chapter['url'])
+        
+        try:
+            image_urls = self.get_chapter_images(chapter['url'])
+        except Exception as e:
+            logger.error(f"Failed to fetch chapter images for {chapter['name']}: {e}")
+            logger.info(f"Skipping chapter {chapter['name']} and continuing with next...")
+            return 0, None
         
         if not image_urls:
             logger.warning(f"No images found for chapter: {chapter['name']}")
@@ -721,9 +849,14 @@ img{{max-width:100%;max-height:100vh;object-fit:contain;}}</style>
         total_downloaded = 0
         self.downloaded_chapter_dirs = []  # Reset for this run
         self.manga_title_clean = manga_title_clean  # Store for merge functions
+        failed_chapters = []  # Track failed chapters
         
         try:
-            with ThreadPoolExecutor(max_workers=3) as executor:  # Limit to 3 concurrent chapter downloads
+            # Adjust concurrent downloads based on consecutive failures
+            current_workers = max(1, min(3, 8 - self.consecutive_failures))
+            logger.info(f"Starting downloads with {current_workers} concurrent workers")
+            
+            with ThreadPoolExecutor(max_workers=current_workers) as executor:
                 future_to_chapter = {
                     executor.submit(self.download_chapter, chapter): chapter 
                     for chapter in chapters_to_download
@@ -739,6 +872,9 @@ img{{max-width:100%;max-height:100vh;object-fit:contain;}}</style>
                         downloaded, chapter_dir = future.result()
                         if downloaded > 0:
                             total_downloaded += downloaded
+                            # Reset consecutive failures on success
+                            self.consecutive_failures = 0
+                            
                             # Track chapter dir for potential merging
                             if chapter_dir:
                                 self.downloaded_chapter_dirs.append((chapter_dir, chapter['name']))
@@ -759,10 +895,31 @@ img{{max-width:100%;max-height:100vh;object-fit:contain;}}</style>
                                 if self.delete_images_after_conversion and chapter_dir:
                                     if self.convert_to_pdf or self.convert_to_cbz or self.convert_to_epub:
                                         self.delete_chapter_images(chapter_dir)
+                        else:
+                            # Track failed chapters with full chapter info
+                            failed_chapters.append(chapter['name'])
+                            self.failed_chapters.append(chapter)
+                            self.consecutive_failures += 1
+                            logger.warning(f"Failed to download chapter {chapter['name']}")
                         
-                        time.sleep(self.delay)  # Small delay between chapters
+                        # Adaptive delay between chapters
+                        adaptive_delay = self.delay * (1 + self.consecutive_failures * 0.5)
+                        time.sleep(adaptive_delay)
+                        
                     except Exception as e:
                         logger.error(f"Error downloading chapter {chapter['name']}: {e}")
+                        failed_chapters.append(chapter['name'])
+                        self.failed_chapters.append(chapter)
+                        self.consecutive_failures += 1
+            
+            # Report failed chapters
+            if failed_chapters:
+                logger.warning(f"\n⚠️  Failed to download {len(failed_chapters)} chapters:")
+                for chapter in failed_chapters[:10]:  # Show first 10
+                    logger.warning(f"   - {chapter}")
+                if len(failed_chapters) > 10:
+                    logger.warning(f"   ... and {len(failed_chapters) - 10} more")
+                logger.info("💡 You can retry these chapters individually later.")
             
             # After all chapters downloaded, create merged files if enabled
             if self.merge_chapters and self.downloaded_chapter_dirs:

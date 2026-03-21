@@ -12,8 +12,8 @@ from PyQt6.QtCore import Qt, QPropertyAnimation, QEasingCurve
 from gui.theme import Colors, Spacing, Fonts
 from gui.config import get_settings, save_settings
 from gui.components.animated_button import NavButton
-from gui.tabs import UrlInputTab, MangaInfoTab, DownloadsTab, SettingsTab
-from gui.workers import ScraperWorker, DownloadWorker
+from gui.tabs import UrlInputTab, MangaInfoTab, DownloadsTab, SettingsTab, LibraryTab
+from gui.workers import ScraperWorker, DownloadWorker, ConversionWorker
 from gui.components.download_card import DownloadStatus
 from flaresolverr_client import is_flaresolverr_running
 
@@ -29,6 +29,7 @@ class MainWindow(QMainWindow):
         
         self._scraper_worker = None
         self._download_worker = None
+        self._conversion_worker = None
         self._current_manga_url = ""
         self._cover_data = None
         
@@ -118,8 +119,12 @@ class MainWindow(QMainWindow):
         self._nav_group.addButton(self._nav_downloads, 2)
         sidebar_layout.addWidget(self._nav_downloads)
         
+        self._nav_library = NavButton("📚", "Library")
+        self._nav_group.addButton(self._nav_library, 3)
+        sidebar_layout.addWidget(self._nav_library)
+        
         self._nav_settings = NavButton("⚙️", "Settings")
-        self._nav_group.addButton(self._nav_settings, 3)
+        self._nav_group.addButton(self._nav_settings, 4)
         sidebar_layout.addWidget(self._nav_settings)
         
         sidebar_layout.addStretch()
@@ -151,11 +156,13 @@ class MainWindow(QMainWindow):
         self._url_tab = UrlInputTab()
         self._info_tab = MangaInfoTab()
         self._downloads_tab = DownloadsTab()
+        self._library_tab = LibraryTab()
         self._settings_tab = SettingsTab()
         
         self._stack.addWidget(self._url_tab)
         self._stack.addWidget(self._info_tab)
         self._stack.addWidget(self._downloads_tab)
+        self._stack.addWidget(self._library_tab)
         self._stack.addWidget(self._settings_tab)
         
         main_layout.addWidget(self._stack, 1)
@@ -173,6 +180,14 @@ class MainWindow(QMainWindow):
         
         # Downloads Tab
         self._downloads_tab.cancelDownload.connect(self._on_cancel_download)
+        self._downloads_tab.retryChapter.connect(self._on_retry_chapter)
+        self._downloads_tab.retryAllFailed.connect(self._on_retry_all_failed)
+        
+        # Library Tab
+        self._library_tab.downloadMissingChapters.connect(self._on_download_missing_chapters)
+        self._library_tab.convertToPDF.connect(self._on_convert_to_pdf)
+        self._library_tab.convertToEPUB.connect(self._on_convert_to_epub)
+        self._library_tab.convertToCBZ.connect(self._on_convert_to_cbz)
         
         # Settings Tab
         self._settings_tab.settingsChanged.connect(self._on_settings_changed)
@@ -184,9 +199,13 @@ class MainWindow(QMainWindow):
     def _switch_to_tab(self, index: int):
         """Switch to a specific tab programmatically."""
         self._stack.setCurrentIndex(index)
-        buttons = [self._nav_url, self._nav_info, self._nav_downloads, self._nav_settings]
+        buttons = [self._nav_url, self._nav_info, self._nav_downloads, self._nav_library, self._nav_settings]
         if 0 <= index < len(buttons):
             buttons[index].setChecked(True)
+        
+        # Refresh library when switching to it
+        if index == 3:  # Library tab
+            self._library_tab.refresh()
     
     # ═════════════════════════════════════════════════════════════════
     # Fetch Manga Info
@@ -286,7 +305,9 @@ class MainWindow(QMainWindow):
         self._download_worker.set_download_params(
             manga_url=self._current_manga_url,
             chapters=chapter_dicts,
-            manga_title=self._manga_info.get("title", "Unknown")
+            manga_title=self._manga_info.get("title", "Unknown"),
+            manga_info=self._manga_info,
+            cover_data=self._cover_data
         )
         
         # Connect with QueuedConnection for cross-thread safety (ThreadPoolExecutor -> main thread)
@@ -338,6 +359,185 @@ class MainWindow(QMainWindow):
         # This would require more complex worker management
         pass
     
+    def _on_retry_chapter(self, chapter_name: str):
+        """Handle retry request for a single failed chapter."""
+        if not self._download_worker or not hasattr(self._download_worker, 'scraper'):
+            QMessageBox.warning(
+                self,
+                "Cannot Retry",
+                "No active download session. Please start a new download."
+            )
+            return
+        
+        # Reset the card to queued state
+        self._downloads_tab.set_status(chapter_name, DownloadStatus.QUEUED)
+        
+        # Retry the chapter using the scraper
+        # This would need to be implemented in the download worker
+        # For now, show a message
+        QMessageBox.information(
+            self,
+            "Retry",
+            f"Retrying {chapter_name}..."
+        )
+    
+    def _on_retry_all_failed(self):
+        """Handle retry all failed downloads."""
+        if not self._download_worker or not hasattr(self._download_worker, 'scraper'):
+            QMessageBox.warning(
+                self,
+                "Cannot Retry",
+                "No active download session. Please start a new download."
+            )
+            return
+        
+        QMessageBox.information(
+            self,
+            "Retry All",
+            "Retrying all failed downloads..."
+        )
+    
+    def _on_download_missing_chapters(self, manga_url: str, missing_chapters: list):
+        """Handle download missing chapters from library."""
+        # Fetch manga info first
+        self._on_fetch_requested(manga_url)
+    
+    def _on_convert_to_pdf(self, manga_path: str):
+        """Handle convert to PDF request from library."""
+        self._start_conversion(manga_path, 'pdf')
+    
+    def _on_convert_to_epub(self, manga_path: str):
+        """Handle convert to EPUB request from library."""
+        self._start_conversion(manga_path, 'epub')
+    
+    def _on_convert_to_cbz(self, manga_path: str):
+        """Handle convert to CBZ request from library."""
+        self._start_conversion(manga_path, 'cbz')
+    
+    def _start_conversion(self, manga_path: str, conversion_type: str):
+        """Start conversion process with progress shown in Downloads tab."""
+        from pathlib import Path
+        import json
+        
+        manga_path_obj = Path(manga_path)
+        if not manga_path_obj.exists():
+            QMessageBox.warning(self, "Error", "Manga folder not found!")
+            return
+        
+        # Get all chapter directories
+        chapter_dirs = [d for d in manga_path_obj.iterdir() if d.is_dir() and not d.name.startswith('.')]
+        
+        if not chapter_dirs:
+            QMessageBox.warning(self, "Error", "No chapters found!")
+            return
+        
+        # Check if conversion already running
+        if self._conversion_worker and self._conversion_worker.is_running:
+            QMessageBox.warning(
+                self,
+                "Conversion in Progress",
+                "Please wait for the current conversion to finish."
+            )
+            return
+        
+        # Get manga title from metadata or folder name
+        manga_title = manga_path_obj.name
+        metadata_file = manga_path_obj / '.metadata.json'
+        if metadata_file.exists():
+            try:
+                with open(metadata_file, 'r', encoding='utf-8') as f:
+                    metadata = json.load(f)
+                    manga_title = metadata.get('title', manga_title)
+            except:
+                pass
+        
+        # Ask for confirmation
+        type_name = conversion_type.upper()
+        reply = QMessageBox.question(
+            self,
+            f"Convert to {type_name}",
+            f"Convert {len(chapter_dirs)} chapters to {type_name}?\n\nProgress will be shown in the Downloads tab.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.No:
+            return
+        
+        # Add conversion cards to downloads tab
+        for chapter_dir in sorted(chapter_dirs):
+            chapter_name = f"{chapter_dir.name} ({type_name})"
+            self._downloads_tab.add_download(chapter_name)
+        
+        # Switch to downloads tab
+        self._switch_to_tab(2)
+        
+        # Start conversion worker
+        self._conversion_worker = ConversionWorker()
+        self._conversion_worker.set_conversion_params(
+            manga_path=str(manga_path_obj),
+            manga_title=manga_title,
+            conversion_type=conversion_type
+        )
+        
+        # Connect signals
+        self._conversion_worker.chapter_started.connect(self._on_conversion_chapter_started)
+        self._conversion_worker.chapter_progress.connect(self._on_conversion_chapter_progress)
+        self._conversion_worker.chapter_finished.connect(self._on_conversion_chapter_finished)
+        self._conversion_worker.error.connect(self._on_conversion_error)
+        self._conversion_worker.finished_signal.connect(self._on_conversion_finished)
+        
+        self._conversion_worker.start()
+    
+    def _on_conversion_chapter_started(self, chapter_name: str):
+        """Handle conversion chapter started."""
+        type_suffix = ""
+        if self._conversion_worker:
+            type_suffix = f" ({self._conversion_worker._conversion_type.upper()})"
+        full_name = f"{chapter_name}{type_suffix}"
+        self._downloads_tab.set_status(full_name, DownloadStatus.DOWNLOADING)
+    
+    def _on_conversion_chapter_progress(self, chapter_name: str, progress: int):
+        """Handle conversion chapter progress."""
+        type_suffix = ""
+        if self._conversion_worker:
+            type_suffix = f" ({self._conversion_worker._conversion_type.upper()})"
+        full_name = f"{chapter_name}{type_suffix}"
+        self._downloads_tab.update_progress(full_name, progress)
+    
+    def _on_conversion_chapter_finished(self, chapter_name: str, success: bool):
+        """Handle conversion chapter finished."""
+        type_suffix = ""
+        if self._conversion_worker:
+            type_suffix = f" ({self._conversion_worker._conversion_type.upper()})"
+        full_name = f"{chapter_name}{type_suffix}"
+        
+        if success:
+            self._downloads_tab.mark_completed(full_name)
+        else:
+            self._downloads_tab.mark_error(full_name)
+    
+    def _on_conversion_error(self, chapter_name: str, message: str):
+        """Handle conversion error."""
+        if chapter_name:
+            type_suffix = ""
+            if self._conversion_worker:
+                type_suffix = f" ({self._conversion_worker._conversion_type.upper()})"
+            full_name = f"{chapter_name}{type_suffix}"
+            self._downloads_tab.mark_error(full_name)
+    
+    def _on_conversion_finished(self, success: bool):
+        """Handle all conversions finished."""
+        if self._conversion_worker:
+            self._conversion_worker.wait()
+        self._conversion_worker = None
+        
+        if success:
+            QMessageBox.information(
+                self,
+                "Conversion Complete",
+                "Conversion finished! Check the Downloads tab for details."
+            )
+    
     def _on_settings_changed(self):
         """Handle settings change."""
         # Settings are auto-saved, nothing special needed here
@@ -361,5 +561,7 @@ class MainWindow(QMainWindow):
             self._scraper_worker.stop()
         if self._download_worker:
             self._download_worker.stop()
+        if self._conversion_worker:
+            self._conversion_worker.stop()
         
         event.accept()

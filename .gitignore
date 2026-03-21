@@ -2,3 +2,8 @@ downloads
 .DS_Store
 .venv
 __pycache__
+/UPDATE_EXISTING_LIBRARY.md
+/RATE_LIMITING_FIXES.md
+/NEW_FEATURES.md
+/LIBRARY_METADATA.md
+/CODE_IMPROVEMENTS.md

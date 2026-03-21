@@ -26,6 +26,8 @@ class DownloadsTab(QWidget):
     """
     
     cancelDownload = pyqtSignal(str)  # Emits chapter name to cancel
+    retryChapter = pyqtSignal(str)  # Emits chapter name to retry
+    retryAllFailed = pyqtSignal()  # Retry all failed downloads
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -107,6 +109,11 @@ class DownloadsTab(QWidget):
         btn_row = QHBoxLayout()
         btn_row.setSpacing(Spacing.SM)
         
+        self._retry_all_btn = AnimatedButton("🔄 Retry All Failed")
+        self._retry_all_btn.clicked.connect(self._retry_all_failed)
+        self._retry_all_btn.hide()  # Hidden until there are failed downloads
+        btn_row.addWidget(self._retry_all_btn)
+        
         self._clear_btn = AnimatedButton("🗑️ Clear Completed")
         self._clear_btn.clicked.connect(self._clear_completed)
         btn_row.addWidget(self._clear_btn)
@@ -173,6 +180,7 @@ class DownloadsTab(QWidget):
         # Create card
         card = DownloadCard(chapter_name)
         card.cancelRequested.connect(self._on_cancel_requested)
+        card.retryRequested.connect(self._on_retry_requested)
         
         # Insert at top
         self._scroll_layout.insertWidget(0, card)
@@ -209,6 +217,14 @@ class DownloadsTab(QWidget):
     def _on_cancel_requested(self, chapter_name: str):
         """Handle cancel request from a card."""
         self.cancelDownload.emit(chapter_name)
+    
+    def _on_retry_requested(self, chapter_name: str):
+        """Handle retry request from a card."""
+        self.retryChapter.emit(chapter_name)
+    
+    def _retry_all_failed(self):
+        """Retry all failed downloads."""
+        self.retryAllFailed.emit()
     
     def _clear_completed(self):
         """Remove completed/error download cards."""
@@ -257,9 +273,21 @@ class DownloadsTab(QWidget):
             1 for card in self._cards.values()
             if card.status == DownloadStatus.COMPLETED
         )
+        failed = sum(
+            1 for card in self._cards.values()
+            if card.status == DownloadStatus.ERROR
+        )
+        
+        # Show/hide retry all button based on failed count
+        if failed > 0:
+            self._retry_all_btn.show()
+        else:
+            self._retry_all_btn.hide()
         
         if active > 0:
             self._status_label.setText(f"Downloading {active} chapter{'s' if active != 1 else ''}")
+        elif failed > 0:
+            self._status_label.setText(f"{failed} download{'s' if failed != 1 else ''} failed")
         elif completed > 0:
             self._status_label.setText(f"{completed} download{'s' if completed != 1 else ''} completed")
         else:
