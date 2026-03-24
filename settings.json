@@ -1,19 +1,20 @@
 {
   "output_dir": "downloads",
   "max_threads": 4,
-  "max_image_threads": 4,
+  "max_image_threads": 5,
   "delay": 1.0,
   "convert_to_pdf": true,
   "convert_to_cbz": false,
-  "convert_to_epub": true,
+  "convert_to_epub": false,
   "merge_chapters": false,
   "delete_images_after_conversion": false,
   "theme": "dark",
-  "window_width": 1680,
-  "window_height": 978,
-  "window_x": 0,
+  "window_width": 1920,
+  "window_height": 1009,
+  "window_x": 8,
   "window_y": 0,
   "recent_urls": [
+    "https://weebcentral.com/series/01J76XYGRASXCSBDH445TKVE1Y/Tune-In-to-the-Midnight-Heart",
     "https://weebcentral.com/series/01J76XY886VV3EDZJAN8RX8MCQ/Ranma12",
     "https://weebcentral.com/series/01J76XYAQSGEJPXCSCVPQ3MHZM/One-Piece-Digital-Colored-Comics"
   ]

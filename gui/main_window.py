@@ -323,9 +323,9 @@ class MainWindow(QMainWindow):
         """Handle chapter download started."""
         self._downloads_tab.set_status(chapter_name, DownloadStatus.DOWNLOADING)
     
-    def _on_chapter_progress(self, chapter_name: str, progress: int):
+    def _on_chapter_progress(self, chapter_name: str, progress: int, current: int, total: int):
         """Handle chapter download progress."""
-        self._downloads_tab.update_progress(chapter_name, progress)
+        self._downloads_tab.update_progress(chapter_name, progress, current, total)
     
     def _on_chapter_finished(self, chapter_name: str, success: bool):
         """Handle chapter download finished."""
@@ -507,13 +507,13 @@ class MainWindow(QMainWindow):
         full_name = f"{chapter_name}{type_suffix}"
         self._downloads_tab.set_status(full_name, DownloadStatus.DOWNLOADING)
     
-    def _on_conversion_chapter_progress(self, chapter_name: str, progress: int):
+    def _on_conversion_chapter_progress(self, chapter_name: str, progress: int, current: int = 0, total: int = 0):
         """Handle conversion chapter progress."""
         type_suffix = ""
         if self._conversion_worker:
             type_suffix = f" ({self._conversion_worker._conversion_type.upper()})"
         full_name = f"{chapter_name}{type_suffix}"
-        self._downloads_tab.update_progress(full_name, progress)
+        self._downloads_tab.update_progress(full_name, progress, current, total)
     
     def _on_conversion_chapter_finished(self, chapter_name: str, success: bool):
         """Handle conversion chapter finished."""

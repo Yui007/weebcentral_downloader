@@ -182,10 +182,16 @@ class DownloadCard(QFrame):
     def status(self) -> DownloadStatus:
         return self._status
     
-    def set_progress(self, progress: int):
-        """Update download progress (0-100)."""
+    def set_progress(self, progress: int, current: int = 0, total: int = 0):
+        """Update download progress (0-100) with image counts."""
         self._progress = max(0, min(100, progress))
         self._progress_bar.setValue(self._progress)
+        
+        # Update format to show X / Y images
+        if total > 0:
+            self._progress_bar.setFormat(f"%p% ({current}/{total} images)")
+        else:
+            self._progress_bar.setFormat("%p%")
         
         if self._status == DownloadStatus.QUEUED and progress > 0:
             self.set_status(DownloadStatus.DOWNLOADING)

@@ -19,7 +19,7 @@ class ConversionWorker(QThread):
     # Signals
     started_signal = pyqtSignal()
     chapter_started = pyqtSignal(str)  # Chapter name
-    chapter_progress = pyqtSignal(str, int)  # Chapter name, progress 0-100
+    chapter_progress = pyqtSignal(str, int, int, int)  # Chapter name, progress 0-100, current, total
     chapter_finished = pyqtSignal(str, bool)  # Chapter name, success
     error = pyqtSignal(str, str)  # Chapter name, error message
     finished_signal = pyqtSignal(bool)  # Overall success

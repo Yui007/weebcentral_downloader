@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 WeebCentral Downloader - Modern PyQt6 GUI
 Run this script to launch the application.

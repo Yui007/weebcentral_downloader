@@ -29,7 +29,7 @@ class DownloadWorker(QThread):
     # Signals
     started_signal = pyqtSignal()
     chapter_started = pyqtSignal(str)  # Chapter name
-    chapter_progress = pyqtSignal(str, int)  # Chapter name, progress 0-100
+    chapter_progress = pyqtSignal(str, int, int, int)  # Chapter name, progress 0-100, current, total
     chapter_finished = pyqtSignal(str, bool)  # Chapter name, success
     overall_progress = pyqtSignal(int, int)  # Current, total
     error = pyqtSignal(str, str)  # Chapter name, error message
@@ -72,7 +72,7 @@ class DownloadWorker(QThread):
         """Thread-safe progress emission."""
         if total > 0 and self._is_running:
             progress = int((downloaded / total) * 100)
-            self.chapter_progress.emit(chapter_name, progress)
+            self.chapter_progress.emit(chapter_name, progress, downloaded, total)
     
     def _download_single_chapter(self, chapter: Dict, settings, scraper_base) -> tuple:
         """Download a single chapter with proper progress tracking.

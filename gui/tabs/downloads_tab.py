@@ -277,13 +277,16 @@ class DownloadsTab(QWidget):
         # Add card in sorted position
         self._resort_cards()
         
+        # Trigger fade-in animation (fix visibility)
+        card.fade_in()
+        
         return card
     
-    def update_progress(self, chapter_name: str, progress: int):
+    def update_progress(self, chapter_name: str, progress: int, current: int = 0, total: int = 0):
         """Update download progress for a chapter."""
         if chapter_name in self._cards:
             card = self._cards[chapter_name]
-            card.set_progress(progress)
+            card.set_progress(progress, current, total)
             self._update_overall_progress()
             # Re-sort if sorting by progress
             if self._sort_by == "progress":
