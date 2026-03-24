@@ -35,7 +35,7 @@
 - **Neon Noir** design with cyan/magenta accents
 - Animated buttons with glow effects
 - Smooth transitions and glassmorphism panels
-- Real-time progress bars per chapter
+- **Granular real-time progress bars** showing image counts (e.g., 12/55)
 
 </td>
 <td width="50%">
@@ -133,7 +133,8 @@ Run directly in your browser - no installation needed!
 |-----|-------------|
 | 🔗 **URL Input** | Paste manga URL, view recent history, fetch manga info |
 | 📖 **Manga Info** | View cover, metadata, tags, and select chapters to download |
-| ⬇️ **Downloads** | Real-time progress bars, parallel downloads, cancel option |
+| ⬇️ **Downloads** | Real-time progress bars with image counts, parallel downloads |
+| 📚 **Library** | Browse downloaded manga, track missing chapters, and batch convert |
 | ⚙️ **Settings** | Configure threads, delay, output folder, conversion options |
 
 ### Settings Available
@@ -175,7 +176,8 @@ weebcentral_downloader/
 │   │   └── settings_tab.py
 │   └── workers/            # Background threads
 │       ├── scraper_worker.py
-│       └── download_worker.py
+│       ├── download_worker.py
+│       └── conversion_worker.py
 └── downloads/              # Default output folder
 ```
 
@@ -202,6 +204,10 @@ Contributions are welcome! Feel free to:
 - 🐛 Report bugs
 - 💡 Suggest features
 - 🔧 Submit pull requests
+
+### ✨ Top Contributors
+
+- **[TheHappyAkita](https://github.com/TheHappyAkita)**: Huge contribution with PR #15 (Library Tab, improved rate limiting, and core stability).
 
 ---
 
