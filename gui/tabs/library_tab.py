@@ -19,6 +19,7 @@ from PyQt6.QtGui import QCursor, QPixmap
 from gui.theme import Colors, Spacing, Fonts
 from gui.components.animated_button import AnimatedButton
 from gui.config import get_settings
+from gui.sorting import natural_sort_key
 
 
 class LibraryItem(QFrame):
@@ -603,7 +604,7 @@ class LibraryTab(QWidget):
                 background-color: {Colors.BG_MEDIUM};
             }}
         """)
-        for chapter in sorted(manga_info['chapters']):
+        for chapter in sorted(manga_info['chapters'], key=natural_sort_key):
             chapter_list.addItem(chapter)
         chapters_layout.addWidget(chapter_list)
         

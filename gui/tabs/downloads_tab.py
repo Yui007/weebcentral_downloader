@@ -18,6 +18,7 @@ from gui.theme import Colors, Spacing, Fonts
 from gui.components.animated_button import AnimatedButton
 from gui.components.download_card import DownloadCard, DownloadStatus
 from gui.config import get_settings
+from gui.sorting import natural_sort_key
 
 
 class DownloadsTab(QWidget):
@@ -247,7 +248,7 @@ class DownloadsTab(QWidget):
         
         # Sort based on current settings
         if self._sort_by == "name":
-            card_data.sort(key=lambda x: x['name'].lower(), reverse=(self._sort_order == "desc"))
+            card_data.sort(key=lambda x: natural_sort_key(x['name']), reverse=(self._sort_order == "desc"))
         else:  # progress
             card_data.sort(key=lambda x: x['progress'], reverse=(self._sort_order == "desc"))
         

@@ -10,6 +10,7 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
 from PyQt6.QtCore import QThread, pyqtSignal
+from gui.sorting import natural_sort_key
 
 logger = logging.getLogger(__name__)
 
@@ -242,7 +243,7 @@ class ScraperWorker(QThread):
         except Exception as e:
             print(f"Error fetching chapters: {e}")
         
-        return chapters
+        return sorted(chapters, key=lambda chapter: natural_sort_key(chapter['name']))
     
     def stop(self):
         """Request the worker to stop."""
